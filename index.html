@@ -44,7 +44,7 @@
           <li>The compass only gives a <b>rough direction</b>. Up close it goes quiet, so pick your mark out by their outfit, then watch them for a moment to <b>identify</b> them.</li>
         </ul>
         <div class="moves">
-          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Click your contract when you're right next to them. Walking only: running strikes fail.</div>
+          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Put the crosshair on your contract when you're right next to them and click. Walking only: running strikes fail.</div>
           <div><kbd>R-Click</kbd><b>Poison · 2 pts</b> Silent. They don't know, and they drop 5s later, giving you time to walk away. 25s cooldown.</div>
           <div><kbd>Click</kbd><b>Klap · 3 pts</b> Click someone hunting you to stun them and wreck their contract.</div>
           <div><kbd>E</kbd><b>Clone</b> Everyone near you takes on your look for 15s. Breaks your hunters' lock. 30s cooldown.</div>
@@ -55,7 +55,9 @@
         <p class="hideline"><b>Hiding spots</b> (mielie patches, skip bins, laundry lines): walk in and nobody can see you. You can strike out of them, and you can click a spot to strike whoever is hiding inside. Civilians wander through them too, so be careful.</p>
         <p class="warnline">Hit the <b>wrong person</b>: −1 point, no strikes for 6s, no contract for 15s, and the scream gives you away to your hunters.</p>
         <div class="keys">
+          <span><kbd>Mouse</kbd> look (click the game first)</span>
           <span><kbd>WASD</kbd> move</span>
+          <span><kbd>Wheel</kbd> camera distance</span>
           <span><kbd>Tab</kbd> scores</span>
           <span><kbd>H</kbd> help in game</span>
         </div>
@@ -140,6 +142,9 @@
         <div id="scoreboard"></div>
       </div>
     </div>
+    <div id="compass" hidden><div id="compassTicks"></div><div id="compassMark"></div><div id="compassText"></div></div>
+    <div id="crosshair"></div>
+    <div id="lookHint" hidden>Click to look around · mouse to aim · <kbd>Esc</kbd> to release</div>
     <div id="popup" class="popup"></div>
     <div id="status"></div>
 
@@ -164,7 +169,7 @@
     <div id="briefing" class="overlay-card" hidden>
       <div class="label">YOUR MOVES</div>
       <div class="moves">
-          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Click your contract when you're right next to them. Walking only: running strikes fail.</div>
+          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Put the crosshair on your contract when you're right next to them and click. Walking only: running strikes fail.</div>
           <div><kbd>R-Click</kbd><b>Poison · 2 pts</b> Silent. They don't know, and they drop 5s later, giving you time to walk away. 25s cooldown.</div>
           <div><kbd>Click</kbd><b>Klap · 3 pts</b> Click someone hunting you to stun them and wreck their contract.</div>
           <div><kbd>E</kbd><b>Clone</b> Everyone near you takes on your look for 15s. Breaks your hunters' lock. 30s cooldown.</div>
@@ -178,7 +183,7 @@
     <div id="help" class="overlay-card" hidden>
       <div class="label">HOW IT WORKS · press H to close</div>
       <div class="moves">
-          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Click your contract when you're right next to them. Walking only: running strikes fail.</div>
+          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Put the crosshair on your contract when you're right next to them and click. Walking only: running strikes fail.</div>
           <div><kbd>R-Click</kbd><b>Poison · 2 pts</b> Silent. They don't know, and they drop 5s later, giving you time to walk away. 25s cooldown.</div>
           <div><kbd>Click</kbd><b>Klap · 3 pts</b> Click someone hunting you to stun them and wreck their contract.</div>
           <div><kbd>E</kbd><b>Clone</b> Everyone near you takes on your look for 15s. Breaks your hunters' lock. 30s cooldown.</div>
@@ -187,6 +192,7 @@
           <div><kbd>Shift</kbd><b>Run</b> Fast but loud. Run near your target and they'll see you coming.</div>
       </div>
       <ul>
+        <li><b>Third person:</b> click the game to capture the mouse, then move it to look around. WASD moves where you're looking, and <kbd>Esc</kbd> releases the mouse. Your strikes land on whoever is under the <b>crosshair</b>. The strip at the top is your compass. On a phone, drag the right side of the screen to look and tap a person to strike. Add <code>?topdown</code> to the address for the old overhead view.</li>
         <li><b>Finding your target:</b> the card at the top left shows who they are and what they're wearing. Far away the wedge gives a rough direction. Up close the compass goes quiet (just a pulse), so look for their outfit. Watch them for 1.5s to <b>identify</b> them (gold ring). You can't identify someone blending in, under a tree or in a hiding spot.</li>
         <li><b>Hiding spots</b> (mielie patches, skip bins, laundry lines): walk in and nobody can see you. You can strike out of them, and you can click a spot to strike whoever is hiding inside. Civilians wander through them too, so be careful.</li>
         <li><b>Kill bonuses:</b> +1 low profile, +2 blended in or from hiding, +1 never spotted.</li>
@@ -217,7 +223,9 @@
   <script src="js/shared.js"></script>
   <script src="js/net.js"></script>
   <script src="js/host.js"></script>
+  <script src="js/vendor/three.min.js"></script>
   <script src="js/render.js"></script>
+  <script src="js/render3d.js"></script>
   <script src="js/client.js"></script>
   <script src="js/main.js"></script>
 </body>

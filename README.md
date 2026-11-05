@@ -36,12 +36,19 @@ can open 3 tabs and play against yourself with no internet.
 
 ## How it plays
 
+The game is **third person** by default, with an over-the-shoulder camera, a crosshair
+and a compass strip across the top. It's rendered with three.js. Add `?topdown` to
+the URL for the original overhead 2D view, which is also used automatically if the
+browser has no WebGL.
+
+
 | Action | Desktop | Touch |
 | --- | --- | --- |
-| Move | WASD / arrows | left joystick |
+| Look around | mouse (click the game first; Esc releases) · wheel = camera distance | drag the right side of the screen |
+| Move | WASD / arrows (relative to the camera) | left joystick |
 | Run (loud) | Shift | RUN |
-| Kill / klap | **left-click the person** (or a hiding spot) | tap the person |
-| Poison | **right-click the person** | POISON, then tap |
+| Kill / klap | **left-click** whoever is under the crosshair (or a hiding spot) | tap the person |
+| Poison | **right-click** whoever is under the crosshair | POISON, then tap |
 | Clone | E | CLONE |
 | Decoy | F | DECOY |
 | Kick dust | Q | DUST |
@@ -93,9 +100,11 @@ js/shared.js   constants, the five looks, seeded map generation, collision
 js/net.js      transports: PeerJS/WebRTC ("peer") and BroadcastChannel ("local")
 js/host.js     authoritative simulation that only the host runs
 js/client.js   input, client-side prediction, interpolation, HUD (every peer)
-js/render.js   canvas renderer
+js/render.js   2D top-down renderer (also paints the 3D ground texture)
+js/render3d.js third-person three.js renderer: kasi, instanced crowd, effects, crosshair picking
 js/main.js     menu, lobby, session wiring
 js/vendor/peerjs.min.js   PeerJS 1.5.4 (MIT), vendored
+js/vendor/three.min.js    three.js r158 (MIT), vendored
 ```
 
 - **Peer to peer.** There's no game server. The public PeerJS broker is only

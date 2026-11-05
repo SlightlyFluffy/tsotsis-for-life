@@ -284,3 +284,25 @@ kbd { font: 12px Inter, sans-serif; font-weight: 800; background: rgba(255,255,2
   .quit { left: auto; right: 12px; top: auto; bottom: 280px; transform: none; }
 }
 @media (max-width: 640px) { .popup { top: 30%; padding: 8px 14px; } .pop-title { font-size: 18px; } .pop-line { font-size: 13px; } }
+
+/* ---------- third person ---------- */
+#compass { position: absolute; top: 58px; left: 50%; transform: translateX(-50%); width: min(460px, 60vw); height: 22px; background: linear-gradient(90deg, transparent, rgba(0,0,0,0.55) 15%, rgba(0,0,0,0.55) 85%, transparent); border-radius: 4px; overflow: hidden; }
+#compassTicks span { position: absolute; top: 3px; transform: translateX(-50%); font: 11px "Archivo Black", Impact, sans-serif; color: rgba(255,255,255,0.55); }
+#compassMark { position: absolute; top: 2px; bottom: 2px; width: 12.5%; transform: translateX(-50%); background: rgba(241,196,15,0.75); border-radius: 3px; box-shadow: 0 0 10px rgba(241,196,15,0.6); }
+#compass[data-b="0"] #compassMark { background: rgba(220,220,220,0.5); box-shadow: none; }
+#compass[data-b="2"] { animation: cpulse 0.8s infinite alternate; }
+#compass[data-b="3"] { background: rgba(241,196,15,0.35); }
+@keyframes cpulse { from { box-shadow: 0 0 0 0 rgba(241,140,15,0.2); background-color: rgba(120,60,0,0.4); } to { box-shadow: 0 0 0 4px rgba(241,140,15,0.6); background-color: rgba(200,110,0,0.55); } }
+#compassText { position: absolute; inset: 0; text-align: center; font: 11px/22px "Archivo Black", Impact, sans-serif; color: #fff; letter-spacing: 0.1em; }
+#crosshair { display: none; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); }
+body.mode3d #crosshair { display: block; }
+#crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,0.85); box-shadow: 0 0 2px #000; }
+#crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+#crosshair::after { top: 8px; left: 0; height: 2px; width: 18px; }
+#lookHint { position: absolute; top: 45%; left: 50%; transform: translate(-50%, 30px); background: rgba(0,0,0,0.65); padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.quit { top: 88px; }
+@media (pointer: coarse) { body.mode3d #crosshair { display: none; } }
+@media (max-width: 640px) { #compass { top: auto; bottom: 300px; width: 70vw; } }
+#lookHint { top: 62%; transform: translateX(-50%); }
+body.mode3d .quit { top: 88px; }
+@media (max-width: 640px) { #compass { top: 205px; bottom: auto; } }

@@ -43,7 +43,19 @@
       this.send = send;
       this.map = TFL.buildMap(start.seed);
       this.canvas = $('game');
-      this.renderer = new TFL.Renderer(this.canvas, this.map);
+      // Third person by default; ?topdown (or no WebGL) gives the old 2D view.
+      this.mode3d = TFL.webglOk() && !/[?&]topdown\b/.test(location.search);
+      if (this.mode3d) {
+        // a canvas can only ever have one kind of context, so give 3D its own
+        const old = this.canvas;
+        this.canvas = old.cloneNode(false);
+        old.replaceWith(this.canvas);
+      }
+      this.renderer = this.mode3d ? new TFL.Renderer3D(this.canvas, this.map) : new TFL.Renderer(this.canvas, this.map);
+      this.yaw = 0;
+      this.pitch = 0.32;
+      this.camDist = 86;
+      document.body.classList.toggle('mode3d', this.mode3d);
       this.snaps = [];
       this.me = null;
       this.pos = null; // locally predicted position
@@ -74,6 +86,19 @@
       this.canvas.addEventListener('pointermove', this.onPointer);
       this.canvas.addEventListener('pointerdown', this.onPointer);
       this.noMenu = (e) => e.preventDefault();
+      this.onMouseLook = (e) => {
+        if (document.pointerLockElement !== this.canvas) return;
+        this.yaw += e.movementX * 0.0032;
+        this.pitch = Math.max(0.05, Math.min(1.1, this.pitch + e.movementY * 0.0024));
+      };
+      this.onWheel = (e) => { if (this.mode3d) { this.camDist = Math.max(45, Math.min(140, this.camDist + e.deltaY * 0.08)); e.preventDefault(); } };
+      this.onLockChange = () => { $('lookHint').hidden = !this.mode3d || document.pointerLockElement === this.canvas || window.matchMedia('(pointer: coarse)').matches; };
+      document.addEventListener('mousemove', this.onMouseLook);
+      document.addEventListener('pointerlockchange', this.onLockChange);
+      this.canvas.addEventListener('wheel', this.onWheel, { passive: false });
+      this.canvas.addEventListener('pointerup', (e) => this.onPointer(e));
+      this.canvas.addEventListener('pointercancel', (e) => this.onPointer(e));
+      setTimeout(() => this.onLockChange(), 0);
       this.canvas.addEventListener('contextmenu', this.noMenu);
       this.downAt = new Map();
       this.poisonArmed = false;
@@ -102,6 +127,11 @@
       this.canvas.removeEventListener('pointermove', this.onPointer);
       this.canvas.removeEventListener('pointerdown', this.onPointer);
       this.canvas.removeEventListener('contextmenu', this.noMenu);
+      document.removeEventListener('mousemove', this.onMouseLook);
+      document.removeEventListener('pointerlockchange', this.onLockChange);
+      if (document.pointerLockElement === this.canvas) document.exitPointerLock();
+      if (this.renderer.dispose) this.renderer.dispose();
+      document.body.classList.remove('mode3d');
       $('hud').hidden = true;
       $('vignette').style.opacity = 0;
     }
@@ -135,7 +165,9 @@
     /** What a click at this screen point (CSS px) would hit: a hiding spot or a visible body. */
     pickAt(sx, sy) {
       const r = this.renderer;
-      if (!r.cam || !this.lastEnts) return null;
+      if (!this.lastEnts || !this.pos) return null;
+      if (this.mode3d) return r.pick(sx, sy, this.lastEnts, this.me.id, this.pos);
+      if (!r.cam) return null;
       const w = this.toWorld(sx, sy);
       const si = TFL.spotAt(this.map, w.x, w.y);
       if (si >= 0) {
@@ -168,14 +200,47 @@
       this.send(msg);
     }
 
+    /** Where a strike aims: the crosshair when the mouse is captured, otherwise the pointer. */
+    aimPoint() {
+      if (this.mode3d && document.pointerLockElement === this.canvas) return { x: this.renderer.vw / 2, y: this.renderer.vh / 2 };
+      return this.mouse;
+    }
+
     onPointer(e) {
+      if (this.destroyed) return;
       const r = this.canvas.getBoundingClientRect();
       const sx = e.clientX - r.left, sy = e.clientY - r.top;
-      this.mouse = { x: sx, y: sy };
+      const touch = e.pointerType === 'touch';
+      if (!(this.mode3d && document.pointerLockElement === this.canvas)) this.mouse = { x: sx, y: sy };
+
+      if (this.mode3d && touch) {
+        // touch: drag to look around, tap a person to strike
+        if (e.type === 'pointerdown') this.drag = { x: sx, y: sy, sx, sy, at: performance.now(), moved: 0 };
+        else if (e.type === 'pointermove' && this.drag) {
+          const dx = sx - this.drag.x, dy = sy - this.drag.y;
+          this.yaw += dx * 0.007;
+          this.pitch = Math.max(0.05, Math.min(1.1, this.pitch + dy * 0.004));
+          this.drag.x = sx; this.drag.y = sy;
+          this.drag.moved = Math.max(this.drag.moved, Math.hypot(sx - this.drag.sx, sy - this.drag.sy));
+        } else if (e.type === 'pointerup' && this.drag) {
+          if (this.drag.moved < 12 && performance.now() - this.drag.at < 400) {
+            this.act(sx, sy, this.poisonArmed ? 'poison' : 'strike');
+            if (this.poisonArmed) { this.poisonArmed = false; $('btnPoison').classList.remove('on'); }
+          }
+          this.drag = null;
+        } else if (e.type === 'pointercancel') this.drag = null;
+        return;
+      }
       if (e.type !== 'pointerdown') return;
-      if (e.button === 2) this.act(sx, sy, 'poison');
+      if (this.mode3d && document.pointerLockElement !== this.canvas) {
+        // first click captures the mouse for looking around
+        if (this.canvas.requestPointerLock) this.canvas.requestPointerLock();
+        return;
+      }
+      const aim = this.aimPoint();
+      if (e.button === 2) this.act(aim.x, aim.y, 'poison');
       else if (e.button === 0) {
-        this.act(sx, sy, this.poisonArmed ? 'poison' : 'strike');
+        this.act(aim.x, aim.y, this.poisonArmed ? 'poison' : 'strike');
         if (this.poisonArmed) { this.poisonArmed = false; $('btnPoison').classList.remove('on'); }
       }
     }
@@ -260,6 +325,8 @@
         if (m.me.tp !== this.tp || !this.pos) {
           this.tp = m.me.tp;
           this.pos = { x: m.me.x, y: m.me.y };
+          // after a (re)spawn, face the middle of the kasi
+          this.yaw = Math.atan2(C.H / 2 - m.me.y, C.W / 2 - m.me.x);
         } else if (Math.hypot(m.me.x - this.pos.x, m.me.y - this.pos.y) > 60) {
           // host disagreed a lot (e.g. we were frozen); trust the host
           this.pos = { x: m.me.x, y: m.me.y };
@@ -324,8 +391,15 @@
         const sp = d.sprint ? C.SPRINT : C.WALK;
         if (Math.hypot(d.x, d.y) > 0.1) {
           moving = true;
-          TFL.moveCircle(this.map, this.pos, d.x * sp * dt, d.y * sp * dt, C.R);
-          this.myFacing = Math.atan2(d.y, d.x);
+          let mx = d.x, my = d.y;
+          if (this.mode3d) {
+            // W is "where the camera looks"; A/D strafe
+            const fx = Math.cos(this.yaw), fy = Math.sin(this.yaw);
+            mx = fx * -d.y + -fy * d.x;
+            my = fy * -d.y + fx * d.x;
+          }
+          TFL.moveCircle(this.map, this.pos, mx * sp * dt, my * sp * dt, C.R);
+          this.myFacing = Math.atan2(my, mx);
           this.myPhase += sp * dt * 0.16;
         }
       }
@@ -339,6 +413,7 @@
           e.y = this.pos.y;
           e.facing = this.myFacing;
           e.phase = moving ? this.myPhase : 0;
+          if (this.swing && this.swing.until > t) e.flags |= 8;
           continue;
         }
         if (e.flags & 1) { if (!this.downAt.has(e.id)) this.downAt.set(e.id, t); }
@@ -355,13 +430,16 @@
 
       for (const e of ents) e.covered = TFL.spotAt(this.map, e.x, e.y) >= 0;
       this.lastEnts = ents;
-      this.hover = this.mouse && this.me && this.me.st === 0 && this.pos ? this.pickAt(this.mouse.x, this.mouse.y) : null;
+      const aim = this.aimPoint();
+      this.hover = aim && this.me && this.me.st === 0 && this.pos ? this.pickAt(aim.x, aim.y) : null;
+      if (this.fx.length > 30) this.fx = this.fx.filter((f) => t - f.at < 3);
 
       const camSrc = this.pos || { x: C.W / 2, y: C.H / 2 };
       const cam = this.cam || { x: camSrc.x, y: camSrc.y };
       cam.x += (camSrc.x - cam.x) * Math.min(1, dt * 10);
       cam.y += (camSrc.y - cam.y) * Math.min(1, dt * 10);
       this.cam = cam;
+      if (this.mode3d) { cam.x = camSrc.x; cam.y = camSrc.y; cam.yaw = this.yaw; cam.pitch = this.pitch; cam.dist = this.camDist; }
 
       const me = this.me;
       this.renderer.draw({
@@ -376,6 +454,26 @@
         meSpot: !!(me && me.sp),
       });
       this.updateHud(now);
+    }
+
+    /** AC-style compass strip across the top (third person only). */
+    updateCompass(tg) {
+      const el = $('compass');
+      if (!this.mode3d) { el.hidden = true; return; }
+      el.hidden = false;
+      const mk = $('compassMark');
+      const norm = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+      // cardinal ticks
+      const ticks = $('compassTicks');
+      if (!ticks.childElementCount) for (const [lbl, a] of [['E', 0], ['S', Math.PI / 2], ['W', Math.PI], ['N', -Math.PI / 2]]) { const s = document.createElement('span'); s.textContent = lbl; s.dataset.a = a; ticks.appendChild(s); }
+      for (const s of ticks.children) s.style.left = (50 + (norm(+s.dataset.a - this.yaw) / Math.PI) * 50) + '%';
+      el.dataset.b = tg ? tg.b : -1;
+      if (tg && tg.b < 2 && tg.a !== undefined) {
+        const rel = norm(tg.a * (Math.PI / 4) - this.yaw);
+        mk.hidden = false;
+        mk.style.left = (50 + (rel / Math.PI) * 50) + '%';
+      } else mk.hidden = true;
+      this.setText('compassText', !tg ? '' : tg.b === 2 ? 'CLOSE — LOOK AROUND' : tg.b === 3 ? 'IDENTIFIED' : '');
     }
 
     updateActionBar(me) {
@@ -449,6 +547,7 @@
         $('targetCard').classList.toggle('empty', !tg);
         $('targetSwatch').style.background = tg ? TFL.STYLES[tg.s].shirt : 'transparent';
       }
+      this.updateCompass(tg);
       const meter = $('tcMeter');
       if (tg) {
         this.setText('targetName', tg.n);
