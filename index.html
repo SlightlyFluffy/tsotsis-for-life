@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Tsotsi's For Life</title>
+  <meta name="description" content="Peer-to-peer social stealth game for 3–5 players. Hunt your mark through the kasi crowd while someone hunts you.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- ===================== MENU ===================== -->
+  <section id="menu" class="screen">
+    <div class="panel hero">
+      <div class="brand">
+        <div class="brand-kicker">a kasi stealth game</div>
+        <h1>TSOTSI'S<br><span>FOR LIFE</span></h1>
+        <span id="modeBadge" class="tag" hidden>LOCAL TEST MODE</span>
+      </div>
+
+      <label class="field">
+        <span>Your street name</span>
+        <input id="nameInput" maxlength="14" placeholder="e.g. Vusi" autocomplete="off">
+      </label>
+
+      <div class="actions">
+        <button id="btnHost" class="btn primary">Host a game</button>
+        <div class="join-row">
+          <input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false">
+          <button id="btnJoin" class="btn">Join</button>
+        </div>
+      </div>
+      <div id="menuError" class="error" role="alert"></div>
+
+      <details class="howto" open>
+        <summary>How to play</summary>
+        <ul>
+          <li><b>Everyone hunts, everyone is hunted.</b> You get a contract on another player. Someone else has one on you.</li>
+          <li>The streets are full of people dressed <b>exactly like you</b>. Walk like a local and nobody can tell you apart.</li>
+          <li>The <b>compass</b> around you points at your mark. When you're close enough they light up gold — get next to them and press <kbd>E</kbd>.</li>
+          <li>Hit the <b>wrong person</b> and you lose the contract. Sprinting near your mark <b>exposes</b> you.</li>
+          <li>Feel a hunter on your back? Spot them and press <kbd>E</kbd> first to <b>klap</b> them.</li>
+          <li>Bonus points for staying <b>low profile</b>, <b>blending</b> into a crowd or under a tree, and never getting spotted.</li>
+        </ul>
+        <div class="keys">
+          <span><kbd>WASD</kbd> move</span>
+          <span><kbd>Shift</kbd> sprint</span>
+          <span><kbd>E</kbd>/<kbd>Space</kbd> take out / klap</span>
+          <span><kbd>Tab</kbd> scores</span>
+        </div>
+      </details>
+      <p class="fine">Peer-to-peer: one player hosts, everyone else connects straight to them. 3–5 players.</p>
+    </div>
+  </section>
+
+  <!-- ===================== LOBBY ===================== -->
+  <section id="lobby" class="screen" hidden>
+    <div class="panel">
+      <div class="lobby-head">
+        <div>
+          <div class="label">ROOM CODE</div>
+          <div id="roomCode" class="code">----</div>
+        </div>
+        <div class="invite">
+          <input id="roomLink" readonly aria-label="Invite link">
+          <button id="btnCopy" class="btn small">Copy invite link</button>
+        </div>
+      </div>
+      <div id="playerList" class="slots"></div>
+      <div id="lobbyHint" class="hint"></div>
+      <div class="lobby-foot">
+        <label class="field inline">
+          <span>Round</span>
+          <select id="durationSel">
+            <option value="180">3 minutes</option>
+            <option value="300" selected>5 minutes</option>
+            <option value="480">8 minutes</option>
+          </select>
+        </label>
+        <div class="grow"></div>
+        <button id="btnLeave" class="btn ghost">Leave</button>
+        <button id="btnStart" class="btn primary" disabled>Start game</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== END ===================== -->
+  <section id="end" class="screen" hidden>
+    <div class="panel">
+      <div class="label">ROUND OVER</div>
+      <h2><span id="winnerName"></span> runs the kasi</h2>
+      <table class="results">
+        <thead><tr><th>#</th><th>Player</th><th>Take-outs</th><th>Klaps</th><th>Downed</th><th>Score</th></tr></thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+      <div id="endHint" class="hint"></div>
+      <div class="lobby-foot">
+        <div class="grow"></div>
+        <button id="btnEndLeave" class="btn ghost">Leave</button>
+        <button id="btnAgain" class="btn primary">Back to lobby</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" hidden>
+    <div id="vignette"></div>
+    <div class="hud-top">
+      <div id="feed"></div>
+      <div id="timer">0:00</div>
+      <div class="hud-right">
+        <div class="myscore"><span class="label">SCORE</span><span id="myScore">0</span></div>
+        <div id="scoreboard"></div>
+      </div>
+    </div>
+    <div id="popup" class="popup"></div>
+    <div id="status"></div>
+
+    <div id="targetCard" class="card empty">
+      <canvas id="targetPortrait" width="72" height="72"></canvas>
+      <div>
+        <div class="label">CONTRACT</div>
+        <div id="targetName"></div>
+        <div id="targetLook"></div>
+        <div id="targetBand"></div>
+      </div>
+    </div>
+    <div id="huntCard" class="card">
+      <div class="hunt-count" id="huntCount">0</div>
+      <div>
+        <div class="label">HUNTING YOU</div>
+        <div id="huntInfo"></div>
+      </div>
+    </div>
+
+    <div id="deathScreen" hidden>
+      <div class="death-title">TAKEN OUT</div>
+      <div>Back on the streets in <span id="respawnIn">5</span>s</div>
+    </div>
+
+    <button id="btnQuit" class="btn ghost small quit" aria-label="Leave game">✕</button>
+    <div id="touch">
+      <div id="joystick"><div id="joyKnob"></div></div>
+      <button id="btnSprint">RUN</button>
+      <button id="btnAct">KLAP</button>
+    </div>
+  </div>
+
+  <script src="js/vendor/peerjs.min.js"></script>
+  <script src="js/shared.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/host.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/client.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
