@@ -182,3 +182,40 @@ kbd { font: 12px Inter, sans-serif; font-weight: 800; background: rgba(255,255,2
   .hunt-count { font-size: 26px; width: 30px; }
   .death-title { font-size: 40px; }
 }
+
+/* ---------- moves / action bar ---------- */
+.moves { display: grid; gap: 8px; margin: 10px 0; }
+.moves > div { display: grid; grid-template-columns: 52px 92px 1fr; align-items: baseline; gap: 8px; color: #e8dcc6; font-size: 14px; }
+.moves kbd { justify-self: start; }
+.moves b { color: var(--gold); }
+.warnline { color: #ffb4a8; font-size: 13px; margin: 6px 0 10px; }
+.idtrack { height: 4px; background: rgba(255,255,255,0.12); border-radius: 2px; margin-top: 6px; overflow: hidden; width: 160px; max-width: 100%; }
+#idBar { height: 100%; width: 0; background: var(--gold); transition: width 0.15s; }
+#actionBar { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+.ab { display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.6); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font: 12px "Archivo Black", Impact, sans-serif; letter-spacing: 0.03em; white-space: nowrap; }
+.ab[data-state="ready"] { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 0 2px rgba(241,196,15,0.35); animation: blink 0.5s infinite alternate; }
+.ab[data-state="off"] { opacity: 0.5; }
+.ab[data-state="warn"] { color: var(--orange); border-color: var(--orange); }
+#status { bottom: 64px; }
+.overlay-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 220px); overflow-y: auto; background: rgba(27,20,14,0.94); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; pointer-events: auto; }
+.overlay-card ul { padding-left: 18px; margin: 8px 0 0; font-size: 13px; color: #e8dcc6; }
+.overlay-card li { margin: 4px 0; }
+.brief-foot { font-size: 13px; color: #ffb4a8; }
+#briefing { top: 38%; }
+@media (max-width: 1100px) { .card { bottom: 64px; } }
+@media (max-width: 640px) {
+  #actionBar { display: none; }
+  .card { bottom: 14px; }
+  .moves > div { grid-template-columns: 46px 1fr; }
+  .moves > div > b { grid-column: 2; }
+  .moves > div { font-size: 13px; }
+}
+@media (pointer: coarse) {
+  #actionBar { display: none; }
+  #btnDust { position: absolute; right: 24px; bottom: 130px; width: 76px; height: 76px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); color: #fff; font: 12px "Archivo Black", Impact, sans-serif; background: rgba(214,180,130,0.45); touch-action: none; }
+}
+.tag.bot { background: #5d7f8c; }
+.slot-info { flex: 1; }
+.slot-x { pointer-events: auto; }
+#game { cursor: crosshair; }
+#briefing { pointer-events: none; }

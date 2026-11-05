@@ -37,6 +37,7 @@
           pid: p.pid,
           name: p.name,
           style: p.style,
+          bot: !!p.bot,
           id: this.newId(),
           x: sp.x,
           y: sp.y,
@@ -53,6 +54,8 @@
           hidden: false,
           exposed: 0,
           unseen: true,
+          idProg: 0,
+          dustCd: 0,
           score: 0,
           kills: 0,
           deaths: 0,
@@ -104,6 +107,9 @@
       const cold = options.filter((l) => !nodes[l].hot);
       const hot = options.filter((l) => nodes[l].hot);
       const next = hot.length && (Math.random() < 0.4 || !cold.length) ? pick(hot) : pick(cold.length ? cold : options);
+      // Now and then a civilian is in a hurry, so a fast mover isn't
+      // automatically a player.
+      n.hurry = Math.random() < 0.07;
       n.prev = n.node;
       n.node = next;
       const p = this.nodePoint(nodes[next]);
@@ -133,8 +139,10 @@
       if (msg.t === 'in') {
         p.pending.push(msg);
         if (p.pending.length > 8) p.pending.shift();
-      } else if (msg.t === 'act') {
-        p.wantsAct = true;
+      } else if (msg.t === 'act' && Number.isInteger(msg.id)) {
+        p.wantsAct = msg.id; // the body they clicked on
+      } else if (msg.t === 'dust') {
+        p.wantsDust = true;
       }
     }
 
@@ -165,6 +173,66 @@
       p.y = np.y;
     }
 
+    // ---- bots ------------------------------------------------------------
+    nearestNode(p) {
+      let best = 0, bd = Infinity;
+      this.map.nodes.forEach((n, i) => { const d = dist(n, p); if (d < bd) { bd = d; best = i; } });
+      return best;
+    }
+
+    botThink(p, dt) {
+      p.moving = false;
+      p.sprinting = false;
+      if (p.stun > 0) return;
+      const nodes = this.map.nodes;
+      const t = p.target && this.players.get(p.target);
+      const reached = p.nav != null && Math.hypot(nodes[p.nav].x - p.x, nodes[p.nav].y - p.y) < 16;
+      let gx, gy, sprint = false;
+      p.botStuck = Math.max(0, (p.botStuck || 0) - dt);
+
+      if (t && t.state === 'alive') {
+        const d = dist(p, t);
+        if (d < 220 && p.botStuck <= 0) {
+          gx = t.x; gy = t.y;
+          p.nav = null;
+        } else {
+          // greedy walk along the street graph towards the target
+          if (p.nav == null) p.nav = this.nearestNode(p);
+          else if (reached) {
+            const links = nodes[p.nav].links;
+            p.nav = links.reduce((b, l) => (dist(nodes[l], t) < dist(nodes[b], t) ? l : b), links[0]);
+          }
+          gx = nodes[p.nav].x; gy = nodes[p.nav].y;
+          sprint = d > 520;
+        }
+        // strike — walking only, with a little human-ish hesitation
+        if (d < C.ACTION_RANGE - 6 && p.sinceSprint >= C.CALM_TIME && p.cooldown <= 0 && Math.random() < 0.2) p.wantsAct = t.id;
+      } else {
+        // no contract: drift around like a civilian
+        if (p.nav == null) p.nav = this.nearestNode(p);
+        else if (reached) p.nav = pick(nodes[p.nav].links);
+        gx = nodes[p.nav].x; gy = nodes[p.nav].y;
+      }
+
+      // defence: sometimes catches a hunter who gets too close
+      for (const h of this.players.values()) {
+        if (h.target !== p.pid || h.state !== 'alive') continue;
+        const d = dist(h, p);
+        if (d < C.ACTION_RANGE - 4 && p.cooldown <= 0 && Math.random() < (h.exposed > 0 ? 0.25 : 0.04)) p.wantsAct = h.id;
+        if (d < 45 && p.dustCd <= 0 && Math.random() < 0.01) p.wantsDust = true;
+      }
+
+      const dx = gx - p.x, dy = gy - p.y, dd = Math.hypot(dx, dy);
+      if (dd < 4) return;
+      const sp = (sprint ? C.SPRINT : C.WALK) * dt;
+      const before = { x: p.x, y: p.y };
+      TFL.moveCircle(this.map, p, (dx / dd) * Math.min(sp, dd), (dy / dd) * Math.min(sp, dd), C.R);
+      p.moving = true;
+      p.sprinting = sprint;
+      // stuck on a shack corner? fall back to the road graph for a bit
+      if (Math.hypot(p.x - before.x, p.y - before.y) < sp * 0.3) { p.botStuck = 2; p.nav = null; }
+    }
+
     // ---- simulation ------------------------------------------------------
     tick(dt) {
       if (this.over) return;
@@ -176,17 +244,20 @@
         p.cooldown = Math.max(0, p.cooldown - dt);
         p.stun = Math.max(0, p.stun - dt);
         p.exposed = Math.max(0, p.exposed - dt);
+        p.dustCd = Math.max(0, p.dustCd - dt);
+        p.revealed = Math.max(0, (p.revealed || 0) - dt);
         if (p.state === 'dead') {
           p.respawn -= dt;
           if (p.respawn <= 0) {
             const sp = this.spawnPoint();
-            p.x = sp.x; p.y = sp.y; p.tp++;
+            p.x = sp.x; p.y = sp.y; p.tp++; p.nav = null;
             p.state = 'alive';
             p.pending = [];
           }
           continue;
         }
-        this.applyInput(p, dt);
+        if (p.bot) this.botThink(p, dt);
+        else this.applyInput(p, dt);
         p.sinceSprint = p.sprinting ? 0 : p.sinceSprint + dt;
         let near = 0;
         for (const n of this.npcs) {
@@ -203,14 +274,23 @@
           p.exposed = C.EXPOSE_TIME;
           p.unseen = false;
         }
+        if (t) {
+          const d = dist(p, t);
+          const seeing = t.state === 'alive' && !t.hidden && d < C.LOCK_RANGE;
+          const keep = t.state === 'alive' && !t.hidden && d < C.LOCK_RANGE * 1.6 && p.idProg >= C.ID_TIME;
+          if (seeing || keep) p.idProg = Math.min(C.ID_TIME, p.idProg + dt);
+          else p.idProg = Math.max(0, p.idProg - dt * 0.75);
+        }
         if (!p.target) {
+          p.idProg = 0;
           p.contractT -= dt;
           if (p.contractT <= 0) this.assign(p);
         }
       }
 
       for (const p of players) {
-        if (p.wantsAct) { p.wantsAct = false; this.action(p); }
+        if (p.wantsAct) { const id = p.wantsAct; p.wantsAct = 0; this.action(p, id); }
+        if (p.wantsDust) { p.wantsDust = false; this.dust(p); }
       }
 
       if (this.timeLeft <= 0) return this.finish();
@@ -222,7 +302,7 @@
       if (n.idle > 0) { n.idle -= dt; return; }
       const dx = n.tx - n.x, dy = n.ty - n.y;
       const d = Math.hypot(dx, dy);
-      const step = n.speed * dt;
+      const step = (n.hurry ? 150 : n.speed) * dt;
       if (d <= step) { n.x = n.tx; n.y = n.ty; this.arrive(n); }
       else { n.x += (dx / d) * step; n.y += (dy / d) * step; }
     }
@@ -248,31 +328,35 @@
       }
       p.target = t.pid;
       p.unseen = true;
+      p.idProg = 0;
       this.event(p.pid, { pop: { title: 'NEW CONTRACT', lines: [t.name + ' — wearing the ' + TFL.STYLES[t.style].name], color: '#f1c40f' }, sfx: 'contract' });
     }
 
-    nearestEntity(p) {
-      let best = null, bestD = C.ACTION_RANGE;
-      for (const n of this.npcs) {
-        if (n.down > 0) continue;
-        const d = dist(n, p);
-        if (d < bestD) { bestD = d; best = { npc: n }; }
-      }
-      for (const o of this.players.values()) {
-        if (o === p || o.state !== 'alive') continue;
-        const d = dist(o, p);
-        // players get a tiny priority so a target standing in a crowd is
-        // not "stolen" by a civilian at the same distance
-        if (d - 2 < bestD) { bestD = d - 2; best = { player: o }; }
-      }
-      return best;
+    entityById(id) {
+      for (const n of this.npcs) if (n.id === id) return n.down > 0 ? null : { npc: n };
+      for (const o of this.players.values()) if (o.id === id) return o.state === 'alive' ? { player: o } : null;
+      return null;
     }
 
-    action(a) {
+    action(a, id) {
       if (a.state !== 'alive' || a.stun > 0 || a.cooldown > 0) return;
       a.cooldown = 0.35;
-      const hit = this.nearestEntity(a);
-      if (!hit) return;
+      if (a.sinceSprint < C.CALM_TIME) {
+        // Running at people and swinging doesn't work. Same reply whoever is
+        // nearby, so it gives nothing away.
+        a.cooldown = 0.8;
+        this.event(a.pid, { pop: { title: 'TOO LOUD', lines: ['Stop running first — you can only strike while walking.'], color: '#e67e22' }, sfx: 'bad' });
+        return;
+      }
+      // You hit exactly who you clicked, never "whoever is nearest".
+      const hit = this.entityById(id);
+      const body = hit && (hit.npc || hit.player);
+      if (!body || body === a) return;
+      if (dist(body, a) > C.ACTION_RANGE + 8) {
+        a.cooldown = 0.2;
+        this.event(a.pid, { pop: { title: 'OUT OF REACH', lines: ['Get right next to them first.'], color: '#95a5a6' } });
+        return;
+      }
       const o = hit.player;
 
       if (o && a.target === o.pid) return this.takeOut(a, o);
@@ -294,11 +378,30 @@
       // Wrong person — civilian or an uninvolved player.
       if (hit.npc) hit.npc.down = C.NPC_DOWN;
       else { o.stun = Math.max(o.stun, C.BUMP_STUN); this.event(o.pid, { pop: { title: 'BUMPED', lines: ['Someone shoved you by mistake.'], color: '#e67e22' } }); }
-      const hadContract = !!a.target;
       a.target = null;
+      a.idProg = 0;
       a.contractT = C.WHIFF_CONTRACT;
       a.cooldown = C.WHIFF_COOLDOWN;
-      this.event(a.pid, { pop: { title: 'WRONG PERSON', lines: [hadContract ? 'Contract lost. Lie low for a bit.' : 'That was a civilian. Lie low.'], color: '#e67e22' }, sfx: 'bad' });
+      a.score = Math.max(0, a.score - C.WHIFF_POINTS);
+      // The scream gives you away to everyone hunting you.
+      a.revealed = C.WHIFF_REVEAL;
+      this.event(a.pid, { pop: { title: 'WRONG PERSON  −' + C.WHIFF_POINTS, lines: ['Contract lost — no new one for ' + C.WHIFF_CONTRACT + 's.', "Can't strike for " + C.WHIFF_COOLDOWN + 's, and the scream gave you away to your hunters.'], color: '#e74c3c' }, sfx: 'bad' });
+      for (const h of this.players.values()) {
+        if (h.target === a.pid) this.event(h.pid, { pop: { title: 'SOMEONE SCREAMED', lines: [a.name + ' hit the wrong person — they are marked for ' + C.WHIFF_REVEAL + 's!'], color: '#f1c40f' }, sfx: 'alarm' });
+      }
+    }
+
+    dust(a) {
+      if (a.state !== 'alive' || a.stun > 0 || a.dustCd > 0) return;
+      a.dustCd = C.DUST_CD;
+      for (const o of this.players.values()) {
+        if (o === a || o.state !== 'alive' || dist(o, a) > C.DUST_RANGE) continue;
+        o.stun = Math.max(o.stun, C.DUST_STUN);
+        this.event(o.pid, { pop: { title: 'DUSTED', lines: ['Someone kicked dust in your face.'], color: '#e67e22' }, sfx: 'bad' });
+      }
+      for (const n of this.npcs) if (n.down <= 0 && dist(n, a) < C.DUST_RANGE) n.down = 2;
+      // Everyone sees the cloud — it's an escape, not a disguise.
+      for (const pid of this.players.keys()) this.send(pid, { t: 'ev', fx: { k: 'dust', x: Math.round(a.x), y: Math.round(a.y) }, sfx: pid === a.pid ? 'swing' : undefined });
     }
 
     takeOut(a, t) {
@@ -360,12 +463,14 @@
     }
 
     broadcast() {
-      const ents = [];
-      for (const n of this.npcs) ents.push([n.id, Math.round(n.x), Math.round(n.y), n.style, n.down > 0 ? 1 : 0]);
+      const list = [];
+      for (const n of this.npcs) list.push([n.id, Math.round(n.x), Math.round(n.y), n.style, n.down > 0 ? 1 : 0]);
       const players = [...this.players.values()];
-      for (const p of players) ents.push([p.id, Math.round(p.x), Math.round(p.y), p.style, (p.state === 'dead' ? 1 : 0) | (p.stun > 0 ? 2 : 0) | (p.sprinting ? 4 : 0)]);
-      // Sort by id so a player's position in the list gives nothing away.
-      ents.sort((a, b) => a[0] - b[0]);
+      for (const p of players) list.push([p.id, Math.round(p.x), Math.round(p.y), p.style, (p.state === 'dead' ? 1 : 0) | (p.stun > 0 ? 2 : 0)]);
+      // Sort by id so a player's position in the list gives nothing away,
+      // then flatten to [id,x,y,style,flags, id,x,y,...] to keep packets small.
+      list.sort((a, b) => a[0] - b[0]);
+      const ents = [].concat(...list);
       const sb = this.scoreboard().map((s) => [s.name, s.score, s.style]);
       const tl = Math.max(0, Math.ceil(this.timeLeft));
 
@@ -374,15 +479,21 @@
           id: p.id, tp: p.tp, x: Math.round(p.x), y: Math.round(p.y),
           st: p.state === 'dead' ? 1 : p.stun > 0 ? 2 : 0,
           rs: Math.ceil(p.respawn), cd: +p.cooldown.toFixed(1), sc: p.score,
-          bl: p.hidden ? 1 : 0, ex: p.exposed > 0 ? 1 : 0,
+          bl: p.hidden ? 1 : 0, ex: p.exposed > 0 ? 1 : 0, rv: p.revealed > 0 ? 1 : 0,
+          dc: Math.ceil(p.dustCd), calm: p.sinceSprint >= C.CALM_TIME ? 1 : 0,
           tgt: null, ct: p.target ? 0 : Math.max(0, Math.ceil(p.contractT)),
           hn: 0, hb: 0, exp: [],
         };
         const t = p.target && this.players.get(p.target);
         if (t && p.state === 'alive') {
           const d = dist(p, t);
-          const locked = t.state === 'alive' && d < (t.hidden ? C.LOCK_RANGE_HIDDEN : C.LOCK_RANGE);
-          me.tgt = { s: t.style, n: t.name, a: +Math.atan2(t.y - p.y, t.x - p.x).toFixed(2), b: locked ? 3 : d < 320 ? 2 : d < 650 ? 1 : 0 };
+          const locked = p.idProg >= C.ID_TIME || (t.revealed > 0 && t.state === 'alive');
+          const b = locked ? 3 : d < C.CLOSE_RANGE ? 2 : d < C.FAR_RANGE ? 1 : 0;
+          me.tgt = { s: t.style, n: t.name, b };
+          // Far away you only get one of eight rough directions; close up you
+          // get none at all and have to pick them out of the crowd yourself.
+          if (b < 2) me.tgt.a = Math.round(Math.atan2(t.y - p.y, t.x - p.x) / (Math.PI / 4));
+          if (b === 2) { me.tgt.ip = +(p.idProg / C.ID_TIME).toFixed(2); me.tgt.h = t.hidden ? 1 : 0; }
           if (locked) me.tgt.id = t.id;
         }
         let nearest = Infinity;

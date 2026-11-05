@@ -279,6 +279,20 @@
         ctx.restore();
       }
 
+      // hover ring: who a click would hit (shown the same for everyone)
+      if (view.hover) {
+        const h = view.ents.find((e) => e.id === view.hover.id);
+        if (h) {
+          ctx.strokeStyle = view.hover.inReach ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash(view.hover.inReach ? [] : [3, 4]);
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, 15, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
       // the action swing
       if (view.swing && view.swing.until > view.t) {
         const me = view.ents.find((e) => e.id === view.meId);
@@ -333,24 +347,40 @@
         }
       }
 
-      // contract compass around me
+      // contract compass around me — deliberately vague
       const me = view.ents.find((e) => e.id === view.meId);
-      if (me && view.tgt && view.tgt.b < 3) {
-        const cols = ['rgba(200,200,200,0.55)', 'rgba(241,196,15,0.6)', 'rgba(241,140,15,0.9)'];
-        const a = view.tgt.a, r = 34;
-        ctx.fillStyle = cols[view.tgt.b];
-        ctx.strokeStyle = cols[view.tgt.b];
-        ctx.lineWidth = 3 + view.tgt.b * 2;
-        const spread = [0.55, 0.38, 0.22][view.tgt.b];
+      if (me && view.tgt && view.tgt.b < 2 && view.tgt.a !== undefined) {
+        const a = view.tgt.a * (Math.PI / 4), r = 40, spread = Math.PI / 8 + 0.08;
+        const col = view.tgt.b === 0 ? 'rgba(220,220,220,0.35)' : 'rgba(241,196,15,0.45)';
+        ctx.fillStyle = col;
         ctx.beginPath();
-        ctx.arc(me.x, me.y, r, a - spread, a + spread);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(me.x + Math.cos(a) * (r + 12), me.y + Math.sin(a) * (r + 12));
-        ctx.lineTo(me.x + Math.cos(a + 0.18) * (r + 3), me.y + Math.sin(a + 0.18) * (r + 3));
-        ctx.lineTo(me.x + Math.cos(a - 0.18) * (r + 3), me.y + Math.sin(a - 0.18) * (r + 3));
+        ctx.moveTo(me.x + Math.cos(a - spread) * 22, me.y + Math.sin(a - spread) * 22);
+        ctx.arc(me.x, me.y, r + 14, a - spread, a + spread);
+        ctx.arc(me.x, me.y, 22, a + spread, a - spread, true);
         ctx.closePath();
         ctx.fill();
+      } else if (me && view.tgt && view.tgt.b === 2) {
+        // they're close, but which way? You'll have to look.
+        const k = (view.t * 0.8) % 1;
+        ctx.strokeStyle = 'rgba(241,170,15,' + (0.55 * (1 - k)) + ')';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(me.x, me.y, 22 + k * 60, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // dust clouds
+      for (const f of view.fx || []) {
+        const k = (view.t - f.at) / 1.2;
+        if (k < 0 || k > 1) continue;
+        for (let i = 0; i < 9; i++) {
+          const ang = i * 0.7 + f.x;
+          const rr = C.DUST_RANGE * (0.3 + k * 0.8) * (0.6 + (i % 3) * 0.2);
+          ctx.fillStyle = 'rgba(214,180,130,' + 0.55 * (1 - k) + ')';
+          ctx.beginPath();
+          ctx.arc(f.x + Math.cos(ang) * rr * 0.6, f.y + Math.sin(ang) * rr * 0.6, rr * 0.55, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // darken outside the world edge

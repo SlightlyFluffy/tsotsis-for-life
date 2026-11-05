@@ -41,16 +41,19 @@
         <ul>
           <li><b>Everyone hunts, everyone is hunted.</b> You get a contract on another player. Someone else has one on you.</li>
           <li>The streets are full of people dressed <b>exactly like you</b>. Walk like a local and nobody can tell you apart.</li>
-          <li>The <b>compass</b> around you points at your mark. When you're close enough they light up gold — get next to them and press <kbd>E</kbd>.</li>
-          <li>Hit the <b>wrong person</b> and you lose the contract. Sprinting near your mark <b>exposes</b> you.</li>
-          <li>Feel a hunter on your back? Spot them and press <kbd>E</kbd> first to <b>klap</b> them.</li>
-          <li>Bonus points for staying <b>low profile</b>, <b>blending</b> into a crowd or under a tree, and never getting spotted.</li>
+          <li>The compass only gives a <b>rough direction</b>. Up close it goes quiet, so pick your mark out by their outfit, then watch them for a moment to <b>identify</b> them.</li>
         </ul>
+        <div class="moves">
+          <div><kbd>Click</kbd><b>Take out</b> Click your contract. Walking only: running strikes fail.</div>
+          <div><kbd>Click</kbd><b>Klap</b> Click someone who is hunting you to stun them (+200).</div>
+          <div><kbd>Q</kbd><b>Kick dust</b> Stun everyone next to you for 2.5s. 20s cooldown.</div>
+          <div><kbd>Shift</kbd><b>Run</b> Fast, but loud. Your target sees you coming.</div>
+        </div>
+        <p class="warnline">Hit the <b>wrong person</b>: −50 points, no strikes for 6s, no contract for 15s, and the scream gives you away to your hunters.</p>
         <div class="keys">
           <span><kbd>WASD</kbd> move</span>
-          <span><kbd>Shift</kbd> sprint</span>
-          <span><kbd>E</kbd>/<kbd>Space</kbd> take out / klap</span>
           <span><kbd>Tab</kbd> scores</span>
+          <span><kbd>H</kbd> help in game</span>
         </div>
       </details>
       <p class="fine">Peer-to-peer: one player hosts, everyone else connects straight to them. 3–5 players.</p>
@@ -83,6 +86,7 @@
         </label>
         <div class="grow"></div>
         <button id="btnLeave" class="btn ghost">Leave</button>
+        <button id="btnBot" class="btn">+ Add bot</button>
         <button id="btnStart" class="btn primary" disabled>Start game</button>
       </div>
     </div>
@@ -127,6 +131,7 @@
         <div id="targetName"></div>
         <div id="targetLook"></div>
         <div id="targetBand"></div>
+        <div class="idtrack"><div id="idBar"></div></div>
       </div>
     </div>
     <div id="huntCard" class="card">
@@ -135,6 +140,40 @@
         <div class="label">HUNTING YOU</div>
         <div id="huntInfo"></div>
       </div>
+    </div>
+
+    <div id="actionBar">
+      <div class="ab" id="abE"><kbd>Click</kbd><span id="abELabel">Take out / Klap</span></div>
+      <div class="ab" id="abQ"><kbd>Q</kbd><span id="abQLabel">Kick dust</span></div>
+      <div class="ab" id="abShift"><kbd>Shift</kbd><span>Run (loud)</span></div>
+      <div class="ab"><kbd>H</kbd><span>Help</span></div>
+    </div>
+
+    <div id="briefing" class="overlay-card" hidden>
+      <div class="label">YOUR MOVES</div>
+      <div class="moves">
+        <div><kbd>Click</kbd><b>Take out</b> Walk up to your contract and click on them. Only works while walking: no running strikes.</div>
+        <div><kbd>Click</kbd><b>Klap</b> Click someone hunting you to stun them and wreck their contract (+200).</div>
+        <div><kbd>Q</kbd><b>Kick dust</b> Stuns everyone right next to you for 2.5s. Your escape. 20s cooldown, and everyone sees the cloud.</div>
+        <div><kbd>Shift</kbd><b>Run</b> Fast but loud. Run near your target and they'll see you coming.</div>
+      </div>
+      <div class="brief-foot">Hit the <b>wrong person</b>: −50, no strikes for 6s, no contract for 15s, and your hunters get a lock on you. Press <kbd>H</kbd> any time for help.</div>
+    </div>
+
+    <div id="help" class="overlay-card" hidden>
+      <div class="label">HOW IT WORKS · press H to close</div>
+      <div class="moves">
+        <div><kbd>Click</kbd><b>Take out</b> Your contract, while walking. Base 100, +100 low profile, +150 blended in, +100 never spotted.</div>
+        <div><kbd>Click</kbd><b>Klap</b> Someone hunting you, +200. They're stunned and lose the contract.</div>
+        <div><kbd>Q</kbd><b>Kick dust</b> Stuns everyone within reach for 2.5s. 20s cooldown.</div>
+        <div><kbd>Shift</kbd><b>Run</b> Can't strike for 1s after. Exposes you if your target is near.</div>
+      </div>
+      <ul>
+        <li><b>Finding your target:</b> far away the wedge gives a rough direction. Up close the compass goes quiet (just a pulse), so look for their outfit. Watch them for 1.5s to <b>identify</b> them (gold ring). You can't identify someone blending into a crowd or under a tree.</li>
+        <li><b>Wrong person</b> (a civilian or the wrong player): −50, no strikes for 6s, no new contract for 15s, and the scream reveals you to your hunters for 5s.</li>
+        <li><b>Striking:</b> you hit exactly the person you click (or tap), and only if they're right next to you. A white ring shows who a click would hit.</li>
+        <li><b>Being hunted:</b> the right card shows how many are after you and how close. Anyone who runs at you gets marked red.</li>
+      </ul>
     </div>
 
     <div id="deathScreen" hidden>
@@ -146,7 +185,7 @@
     <div id="touch">
       <div id="joystick"><div id="joyKnob"></div></div>
       <button id="btnSprint">RUN</button>
-      <button id="btnAct">KLAP</button>
+      <button id="btnDust">DUST</button>
     </div>
   </div>
 

@@ -48,7 +48,7 @@
         if (now - at > 8000) { this.pending.delete(pid); this.net.kick(pid); }
       }
       for (const p of this.players) {
-        if (p.pid === 'host') continue;
+        if (p.pid === 'host' || p.bot) continue;
         if (now - (this.lastSeen.get(p.pid) || 0) > 10000) { this.net.kick(p.pid); this.drop(p.pid); }
       }
       if (this.state !== 'playing') this.pushLobby(); // doubles as a keep-alive
@@ -92,13 +92,33 @@
       if (this.state !== 'playing') this.pushLobby();
     }
 
+    addBot() {
+      if (this.state !== 'lobby' || this.players.length >= C.MAX_PLAYERS) return;
+      const names = ['Bra Tebza', 'Mampho', 'Lucky', 'Zola', 'Ntombi', 'Jabu', 'Kea', 'Spha'];
+      const taken = new Set(this.players.map((p) => p.name));
+      const name = (names.find((n) => !taken.has(n + ' [bot]')) || 'Bot') + ' [bot]';
+      const used = new Set(this.players.map((p) => p.style));
+      let style = 0;
+      while (used.has(style)) style++;
+      this.botSeq = (this.botSeq || 0) + 1;
+      this.players.push({ pid: 'bot' + this.botSeq, name, style, bot: true });
+      this.pushLobby();
+    }
+
+    removeBot(pid) {
+      if (this.state !== 'lobby') return;
+      this.players = this.players.filter((p) => !(p.bot && p.pid === pid));
+      this.pushLobby();
+    }
+
     sendTo(pid, msg) {
+      if (pid.startsWith('bot')) return;
       if (pid === 'host') this.app.onMessage(msg);
       else this.net.send(pid, msg);
     }
 
     pushLobby() {
-      const list = this.players.map((p) => ({ name: p.name, style: p.style, host: p.pid === 'host' }));
+      const list = this.players.map((p) => ({ name: p.name, style: p.style, host: p.pid === 'host', bot: p.bot ? p.pid : null }));
       for (const p of this.players) {
         this.sendTo(p.pid, { t: 'lobby', state: this.state, code: this.code, players: list, me: p.style, duration: this.duration });
       }
@@ -284,8 +304,15 @@
           row.appendChild(cv);
           const info = document.createElement('div');
           info.className = 'slot-info';
-          info.innerHTML = `<div class="slot-name">${TFL.esc(p.name)}${p.host ? ' <span class="tag">HOST</span>' : ''}${p.style === m.me ? ' <span class="tag you">YOU</span>' : ''}</div><div class="slot-look">${TFL.STYLES[p.style].name}</div>`;
+          info.innerHTML = `<div class="slot-name">${TFL.esc(p.name.replace(' [bot]', ''))}${p.bot ? ' <span class="tag bot">BOT</span>' : ''}${p.host ? ' <span class="tag">HOST</span>' : ''}${p.style === m.me ? ' <span class="tag you">YOU</span>' : ''}</div><div class="slot-look">${TFL.STYLES[p.style].name}</div>`;
           row.appendChild(info);
+          if (p.bot && isHost) {
+            const x = document.createElement('button');
+            x.className = 'btn ghost small slot-x';
+            x.textContent = 'Remove';
+            x.onclick = () => this.host.removeBot(p.bot);
+            row.appendChild(x);
+          }
         } else {
           row.innerHTML = `<div class="slot-empty">${i < C.MIN_PLAYERS ? 'Waiting for a player…' : 'Open slot'}</div>`;
         }
@@ -295,6 +322,8 @@
       const ready = n >= C.MIN_PLAYERS;
       $('lobbyHint').textContent = ready ? n + ' tsotsis in the room. ' + (isHost ? 'Start when everyone is in.' : 'Waiting for the host to start…') : 'Need at least ' + C.MIN_PLAYERS + ' players — ' + (C.MIN_PLAYERS - n) + ' more to go.';
       $('btnStart').hidden = !isHost;
+      $('btnBot').hidden = !isHost;
+      $('btnBot').disabled = n >= C.MAX_PLAYERS;
       $('btnStart').disabled = !ready;
       $('durationSel').disabled = !isHost;
       $('durationSel').value = String(m.duration);
@@ -325,6 +354,7 @@
     $('btnJoin').onclick = () => App.joinGame();
     $('codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') App.joinGame(); });
     $('codeInput').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
+    $('btnBot').onclick = () => App.host && App.host.addBot();
     $('btnStart').onclick = () => App.host && App.host.start();
     $('btnLeave').onclick = () => App.leave('');
     $('btnEndLeave').onclick = () => App.leave('');

@@ -24,6 +24,10 @@ anywhere static (Vercel, Netlify, GitHub Pages, …) and share the URL.
 2. Everyone else enters the code (or opens the link) and clicks **Join**.
 3. Once 3–5 players are in, the host presses **Start game**.
 
+**Bots:** the host can press **+ Add bot** in the lobby to fill slots. Bots count
+towards the 3-player minimum, so you can test solo with 2 bots. They run on the
+host and play by the same rules.
+
 ### Testing on one machine
 
 Add `?local` to the URL (`http://localhost:8080/?local`). Peers then talk over
@@ -32,20 +36,35 @@ can open 3 tabs and play against yourself with no internet.
 
 ## How it plays
 
-| Action | Keys | Touch |
+| Action | Desktop | Touch |
 | --- | --- | --- |
 | Move | WASD / arrows | left joystick |
-| Sprint | Shift | RUN |
-| Take out / klap | E or Space | KLAP |
+| Run (loud) | Shift | RUN |
+| Take out / klap | **left-click the person** | tap the person |
+| Kick dust | Q | DUST |
+| Help | H | — |
 | Full scoreboard | Tab (hold) | — |
 
-- **Compass**: the arc around you points at your target and narrows as you get closer.
-- **Lock**: inside 150px your target gets a gold ring (only 70px if they're blending in).
-- **Take out** your target: 100, plus **Low profile** +100 (you didn't sprint in the last 2s), **Blended in** +150 (you were in a crowd or under a tree), and **Never spotted** +100.
-- **Klap** (stun) a player who is hunting you: +200. They're stunned and lose their contract.
-- **Wrong person**: hitting a civilian or anyone who isn't your target or hunter costs you your contract and freezes your actions for 2s.
-- **Exposure**: sprinting within 220px of your target marks you red on their screen for 3s.
-- **Hunter warning**: you always see how many people are hunting you and roughly how close the nearest one is, but not who they are.
+**Your moves**
+
+- **Take out:** click your contract while standing next to them. It only works while walking: you can't strike while running or for 1s after.
+  Base 100, plus **Low profile** +100 (no running in the last 2s), **Blended in** +150 (you were in a crowd or under a tree), and **Never spotted** +100.
+- **Klap:** click someone who is hunting you. +200, and they're stunned and lose their contract.
+- **Kick dust (Q):** stuns everyone right next to you for 2.5s. It's your escape when rushed. 20s cooldown, and everyone can see the cloud.
+- You always hit exactly who you clicked, never "whoever is nearest". A white ring shows who a click would hit, and clicking someone out of reach does nothing.
+
+**Finding your target**
+
+- From far away the compass is a wide wedge pointing in one of 8 rough directions.
+- Within 350px it stops pointing and only pulses, so you have to pick them out by their outfit.
+- Watch them from within 110px for 1.5s to **identify** them and get the gold ring. You can't identify someone blending into a crowd or under a tree.
+
+**Penalties and pressure**
+
+- **Wrong person** (a civilian, or a player who is neither your target nor your hunter): −50 points, no strikes for 6s, no new contract for 15s, and the scream reveals you to your hunters for 5s. They get an instant lock on you.
+- **Exposure:** running within 220px of your target marks you red on their screen for 3s.
+- **The crowd:** there are 36 lookalikes per outfit in play, so 108–180 civilians. Some of them hurry along too, so a fast mover isn't always a player.
+- **Hunter warning:** you always see how many people are hunting you and roughly how close the nearest one is, but not who they are.
 - At most 2 hunters per player. You respawn 5s after being taken out.
 
 ## Architecture

@@ -18,19 +18,27 @@
     NPC_MAX: 96,
     R: 11,
     ACTION_RANGE: 34,
-    LOCK_RANGE: 150, // target gets highlighted inside this range...
-    LOCK_RANGE_HIDDEN: 70, // ...or this range if they are blending / under a tree
+    LOCK_RANGE: 110, // keep eyes on your target this close...
+    ID_TIME: 1.5, // ...for this long to identify them (not while they blend in)
+    CLOSE_RANGE: 350, // inside this the compass stops pointing
+    FAR_RANGE: 700,
+    CALM_TIME: 1.0, // seconds after sprinting before you can strike
+    DUST_RANGE: 70,
+    DUST_STUN: 2.5,
+    DUST_CD: 20,
     EXPOSE_RANGE: 220, // sprinting this close to your target exposes you
     EXPOSE_TIME: 3,
     MAX_HUNTERS: 2,
     RESPAWN: 5,
     NEW_CONTRACT: 3,
-    WHIFF_CONTRACT: 6,
-    WHIFF_COOLDOWN: 2,
+    WHIFF_CONTRACT: 15,
+    WHIFF_COOLDOWN: 6,
+    WHIFF_REVEAL: 5,
+    WHIFF_POINTS: 50,
     STUN_TIME: 3,
     BUMP_STUN: 1.5,
     NPC_DOWN: 5,
-    NPC_PER_STYLE: 22,
+    NPC_PER_STYLE: 36,
     BLEND_RADIUS: 46,
     BLEND_COUNT: 2,
     TREE_COVER: 26,

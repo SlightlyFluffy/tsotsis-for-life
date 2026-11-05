@@ -62,9 +62,17 @@
       this.last = performance.now();
       this.hudCache = {};
       this.destroyed = false;
+      this.fx = [];
+      this.startedAt = performance.now();
+      $('briefing').hidden = false;
+      $('help').hidden = true;
+      setTimeout(() => { if (!this.destroyed) $('briefing').hidden = true; }, 12000);
 
       this.onKey = this.onKey.bind(this);
       this.onResize = () => this.renderer.resize();
+      this.onPointer = this.onPointer.bind(this);
+      this.canvas.addEventListener('pointermove', this.onPointer);
+      this.canvas.addEventListener('pointerdown', this.onPointer);
       window.addEventListener('keydown', this.onKey);
       window.addEventListener('keyup', this.onKey);
       window.addEventListener('blur', () => this.keys.clear());
@@ -87,6 +95,8 @@
       window.removeEventListener('keydown', this.onKey);
       window.removeEventListener('keyup', this.onKey);
       window.removeEventListener('resize', this.onResize);
+      this.canvas.removeEventListener('pointermove', this.onPointer);
+      this.canvas.removeEventListener('pointerdown', this.onPointer);
       $('hud').hidden = true;
       $('vignette').style.opacity = 0;
     }
@@ -95,11 +105,13 @@
     onKey(e) {
       if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
       const k = e.key.toLowerCase();
-      const handled = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift', 'e', ' ', 'tab'];
+      const handled = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift', 'tab', 'q', 'h', '?'];
       if (!handled.includes(k)) return;
       e.preventDefault();
       if (e.type === 'keydown') {
-        if ((k === 'e' || k === ' ') && !e.repeat) this.act();
+        if (k === 'q' && !e.repeat) this.dust();
+        if ((k === 'h' || k === '?') && !e.repeat) $('help').hidden = !$('help').hidden;
+        if (/^[wasd]$|^arrow/.test(k) && performance.now() - this.startedAt > 2500) $('briefing').hidden = true;
         if (k === 'tab') $('scoreboard').classList.add('expanded');
         this.keys.add(k);
       } else {
@@ -108,13 +120,42 @@
       }
     }
 
-    act() {
+    /** Which body is under this screen point (CSS px)? */
+    pickAt(sx, sy) {
+      const r = this.renderer;
+      if (!r.cam || !this.lastEnts) return null;
+      const wx = (sx - r.vw / 2) / r.zoom + r.cam.x, wy = (sy - r.vh / 2) / r.zoom + r.cam.y;
+      let best = null, bd = 18;
+      for (const e of this.lastEnts) {
+        if (e.id === this.me.id || e.flags & 1) continue;
+        const d = Math.hypot(e.x - wx, e.y - wy);
+        if (d < bd) { bd = d; best = e; }
+      }
+      return best;
+    }
+
+    act(sx, sy) {
       const now = performance.now();
       if (now - this.lastAct < 300 || !this.me || this.me.st !== 0) return;
+      const e = this.pickAt(sx, sy);
+      if (!e) return;
       this.lastAct = now;
+      this.myFacing = Math.atan2(e.y - this.pos.y, e.x - this.pos.x);
       this.swing = { until: now / 1000 + 0.25 };
       sfx('swing');
-      this.send({ t: 'act' });
+      this.send({ t: 'act', id: e.id });
+    }
+
+    onPointer(e) {
+      const r = this.canvas.getBoundingClientRect();
+      const sx = e.clientX - r.left, sy = e.clientY - r.top;
+      if (e.type === 'pointermove') { this.mouse = { x: sx, y: sy }; return; }
+      if (e.type === 'pointerdown' && e.button === 0) { this.mouse = { x: sx, y: sy }; this.act(sx, sy); }
+    }
+
+    dust() {
+      if (!this.me || this.me.st !== 0 || this.me.dc > 0) return;
+      this.send({ t: 'dust' });
     }
 
     setupTouch() {
@@ -156,7 +197,7 @@
       const sprint = $('btnSprint');
       sprint.addEventListener('touchstart', (e) => { TFL.touch.sprint = true; sprint.classList.add('on'); e.preventDefault(); }, { passive: false });
       sprint.addEventListener('touchend', () => { TFL.touch.sprint = false; sprint.classList.remove('on'); });
-      $('btnAct').addEventListener('touchstart', (e) => { TFL.client && TFL.client.act(); e.preventDefault(); }, { passive: false });
+      $('btnDust').addEventListener('touchstart', (e) => { TFL.client && TFL.client.dust(); e.preventDefault(); }, { passive: false });
     }
 
     inputDir() {
@@ -192,7 +233,7 @@
           this.pos = { x: m.me.x, y: m.me.y };
         }
         const ents = new Map();
-        for (const e of m.e) ents.set(e[0], e);
+        for (let i = 0; i < m.e.length; i += 5) ents.set(m.e[i], m.e.slice(i, i + 5));
         this.snaps.push({ at: performance.now(), ents });
         if (this.snaps.length > 12) this.snaps.shift();
         this.timeLeft = m.tl;
@@ -201,6 +242,7 @@
         if (m.feed) this.addFeed(m.feed);
         if (m.pop) this.popQueue.push(m.pop);
         if (m.sfx) sfx(m.sfx);
+        if (m.fx) this.fx.push(Object.assign({ at: performance.now() / 1000 }, m.fx));
       }
     }
 
@@ -276,6 +318,14 @@
         e.phase = d > 0.15 ? f.p : 0;
       }
 
+      this.lastEnts = ents;
+      let hover = null;
+      if (this.mouse && this.me && this.me.st === 0 && this.pos) {
+        const h = this.pickAt(this.mouse.x, this.mouse.y);
+        if (h) hover = { id: h.id, inReach: Math.hypot(h.x - this.pos.x, h.y - this.pos.y) < C.ACTION_RANGE + 6 };
+      }
+      this.hover = hover;
+
       const camSrc = this.pos || { x: C.W / 2, y: C.H / 2 };
       const cam = this.cam || { x: camSrc.x, y: camSrc.y };
       cam.x += (camSrc.x - cam.x) * Math.min(1, dt * 10);
@@ -289,8 +339,36 @@
         exposed: new Set(me ? me.exp : []),
         tgt: me && me.tgt,
         swing: this.swing,
+        fx: this.fx,
+        hover: this.hover,
       });
       this.updateHud(now);
+    }
+
+    updateActionBar(me) {
+      // E: tell the player what E would do *right now*, without leaking who
+      // anyone is (only uses things they already know: a locked target or an
+      // exposed hunter).
+      let eLabel = 'Take out / Klap', eState = '';
+      const myEnt = this.pos;
+      const near = (id) => {
+        if (!id || !myEnt) return false;
+        const s = this.snaps[this.snaps.length - 1];
+        const e = s && s.ents.get(id);
+        return e && Math.hypot(e[1] - myEnt.x, e[2] - myEnt.y) < C.ACTION_RANGE;
+      };
+      if (me.st !== 0) { eState = 'off'; eLabel = me.st === 1 ? 'Down' : 'Stunned'; }
+      else if (me.cd > 0.5) { eState = 'off'; eLabel = 'Wait ' + Math.ceil(me.cd) + 's'; }
+      else if (!me.calm || (this.moving && this.inputDir().sprint)) { eState = 'off'; eLabel = 'Too loud — walk'; }
+      else if (me.tgt && near(me.tgt.id)) { eState = 'ready'; eLabel = 'Click them: TAKE OUT'; }
+      else if (me.exp.some(near)) { eState = 'ready'; eLabel = 'Click them: KLAP'; }
+      else if (this.hover && this.hover.inReach) { eLabel = 'Click to strike'; }
+      this.setText('abELabel', eLabel);
+      $('abE').dataset.state = eState;
+      const dc = me.dc || 0;
+      this.setText('abQLabel', dc > 0 ? 'Kick dust ' + dc + 's' : 'Kick dust');
+      $('abQ').dataset.state = me.st !== 0 || dc > 0 ? 'off' : '';
+      $('abShift').dataset.state = this.moving && this.inputDir().sprint ? 'warn' : '';
     }
 
     setText(id, text) {
@@ -328,14 +406,20 @@
       }
       if (tg) {
         this.setText('targetName', tg.n);
-        this.setText('targetLook', TFL.STYLES[tg.s].name);
-        this.setText('targetBand', ['Far away', 'Getting warmer', 'Close by', 'IN SIGHT — take them out!'][tg.b]);
+        this.setText('targetLook', 'Look for: ' + TFL.STYLES[tg.s].name);
+        let band = ['Far away — follow the wedge', 'Getting warmer', 'Close — pick them out of the crowd', 'IDENTIFIED — walk up and click them'][tg.b];
+        if (tg.b === 2 && tg.h) band = 'Close, but blending in — can’t make them out';
+        else if (tg.b === 2 && tg.ip > 0) band = 'Identifying… keep watching';
+        this.setText('targetBand', band);
+        $('idBar').style.width = (tg.b === 3 ? 100 : tg.b === 2 ? Math.round((tg.ip || 0) * 100) : 0) + '%';
         $('targetBand').dataset.b = tg.b;
       } else {
         this.setText('targetName', me.st === 1 ? '—' : 'Waiting for a contract');
         this.setText('targetLook', me.ct > 0 ? 'New contract in ' + me.ct + 's' : '');
         this.setText('targetBand', '');
+        $('idBar').style.width = '0%';
       }
+      this.updateActionBar(me);
 
       // hunters
       const hbText = ['', 'Somewhere out there', 'Getting close', 'RIGHT ON YOU'][me.hb];
@@ -351,7 +435,8 @@
         if (me.bl) chips.push('<span class="chip good">BLENDED</span>');
         if (this.moving && this.inputDir().sprint) chips.push('<span class="chip warn">SPRINTING — conspicuous</span>');
         if (me.ex) chips.push('<span class="chip bad">EXPOSED</span>');
-        if (me.cd > 0.5) chips.push('<span class="chip warn">LYING LOW ' + me.cd.toFixed(0) + 's</span>');
+        if (me.cd > 0.5) chips.push('<span class="chip warn">CAN’T STRIKE ' + me.cd.toFixed(0) + 's</span>');
+        if (me.rv) chips.push('<span class="chip bad">REVEALED TO YOUR HUNTERS</span>');
       }
       if (me.st === 2) chips.push('<span class="chip bad">STUNNED</span>');
       this.setHtml('status', chips.join(''));
