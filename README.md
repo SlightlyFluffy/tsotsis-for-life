@@ -40,18 +40,36 @@ can open 3 tabs and play against yourself with no internet.
 | --- | --- | --- |
 | Move | WASD / arrows | left joystick |
 | Run (loud) | Shift | RUN |
-| Take out / klap | **left-click the person** | tap the person |
+| Kill / klap | **left-click the person** (or a hiding spot) | tap the person |
+| Poison | **right-click the person** | POISON, then tap |
+| Clone | E | CLONE |
+| Decoy | F | DECOY |
 | Kick dust | Q | DUST |
 | Help | H | — |
 | Full scoreboard | Tab (hold) | — |
 
 **Your moves**
 
-- **Take out:** click your contract while standing next to them. It only works while walking: you can't strike while running or for 1s after.
-  Base 100, plus **Low profile** +100 (no running in the last 2s), **Blended in** +150 (you were in a crowd or under a tree), and **Never spotted** +100.
-- **Klap:** click someone who is hunting you. +200, and they're stunned and lose their contract.
-- **Kick dust (Q):** stuns everyone right next to you for 2.5s. It's your escape when rushed. 20s cooldown, and everyone can see the cloud.
-- You always hit exactly who you clicked, never "whoever is nearest". A white ring shows who a click would hit, and clicking someone out of reach does nothing.
+| Move | Points | What it does |
+| --- | --- | --- |
+| **Kill** | 5 | Click your contract while right next to them. Walking only: no strikes while running or for 1s after. Plays a strike animation and locks you in place for about a second. |
+| **Poison** | 2 | Right-click your contract. It's silent: they get no warning and drop 5s later, so you can walk away. 25s cooldown. |
+| **Klap** | 3 | Click someone who is hunting you. They're stunned and lose their contract. |
+| **Clone** | — | Everyone within 110px takes on your look for 15s, and your hunters lose their lock on you. 30s cooldown. |
+| **Decoy** | — | A nearby civilian dresses as you and bolts. Your hunters lose their lock on you. 20s cooldown. |
+| **Kick dust** | — | Stuns everyone right next to you for 2.5s. It's your escape when rushed. 20s cooldown, and everyone sees the cloud. |
+
+Kill bonuses: **Low profile** +1 (no running in the last 2s), **Blended in / From hiding** +2, **Never spotted** +1.
+
+You always hit exactly who you clicked, never "whoever is nearest". A white ring
+shows who a click would hit, and clicking someone out of reach does nothing.
+
+**Hiding spots**
+
+- Mielie patches, skip bins and laundry lines are scattered around the kasi. Walk into one and nobody can see you, and nobody can identify you there.
+- You can strike out of a spot.
+- Click a spot to strike whoever is hiding inside. Your contract is found first, then your hunter. An empty spot costs nothing.
+- Civilians wander through spots too, so striking a spot can hit the wrong person.
 
 **Finding your target**
 
@@ -61,9 +79,9 @@ can open 3 tabs and play against yourself with no internet.
 
 **Penalties and pressure**
 
-- **Wrong person** (a civilian, or a player who is neither your target nor your hunter): −50 points, no strikes for 6s, no new contract for 15s, and the scream reveals you to your hunters for 5s. They get an instant lock on you.
+- **Wrong person** (a civilian, or a player who is neither your target nor your hunter): −1 point, no strikes for 6s, no new contract for 15s, and the scream reveals you to your hunters for 5s. They get an instant lock on you.
 - **Exposure:** running within 220px of your target marks you red on their screen for 3s.
-- **The crowd:** there are 36 lookalikes per outfit in play, so 108–180 civilians. Some of them hurry along too, so a fast mover isn't always a player.
+- **The crowd:** there are 36 lookalikes per outfit in play, so 108–180 civilians. They're unpredictable: they turn back, stop dead, break into a jog, and sometimes tail a random person for a few seconds. A wrong-person poison is silent, so there's no scream, but the civilian still collapses and you still lose the contract.
 - **Hunter warning:** you always see how many people are hunting you and roughly how close the nearest one is, but not who they are.
 - At most 2 hunters per player. You respawn 5s after being taken out.
 

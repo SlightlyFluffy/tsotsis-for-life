@@ -133,11 +133,6 @@ kbd { font: 12px Inter, sans-serif; font-weight: 800; background: rgba(255,255,2
 .chip.bad { color: var(--red); }
 
 .card { position: absolute; bottom: 14px; display: flex; gap: 12px; align-items: center; background: rgba(0,0,0,0.6); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; max-width: calc(50vw - 20px); }
-#targetCard { left: 14px; }
-#targetCard canvas { width: 72px; height: 72px; background: rgba(180,138,92,0.4); border-radius: 10px; flex: none; }
-#targetCard.empty canvas { opacity: 0.25; }
-#targetName { font-weight: 800; font-size: 17px; }
-#targetLook { color: var(--muted); font-size: 13px; }
 #targetBand { font: 13px "Archivo Black", Impact, sans-serif; margin-top: 2px; color: #ccc; }
 #targetBand[data-b="1"] { color: #f7dc6f; }
 #targetBand[data-b="2"] { color: #f39c12; }
@@ -177,7 +172,6 @@ kbd { font: 12px Inter, sans-serif; font-weight: 800; background: rgba(255,255,2
   #timer { font-size: 22px; }
   #scoreboard { display: none; }
   .card { padding: 8px 10px; gap: 8px; }
-  #targetCard canvas { width: 48px; height: 48px; }
   #targetName { font-size: 14px; }
   .hunt-count { font-size: 26px; width: 30px; }
   .death-title { font-size: 40px; }
@@ -219,3 +213,74 @@ kbd { font: 12px Inter, sans-serif; font-weight: 800; background: rgba(255,255,2
 .slot-x { pointer-events: auto; }
 #game { cursor: crosshair; }
 #briefing { pointer-events: none; }
+
+/* ---------- contract card (top left) ---------- */
+.hud-left { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; }
+#targetCard { background: rgba(20,14,9,0.88); border: 2px solid rgba(241,196,15,0.55); border-radius: 14px; padding: 8px 12px 10px; width: 340px; max-width: 100%; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+#targetCard.empty { border-color: var(--line); }
+#targetCard[data-b="3"] { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(241,196,15,0.35), 0 8px 24px rgba(0,0,0,0.45); }
+.tc-head { font: 11px "Archivo Black", Impact, sans-serif; letter-spacing: 0.2em; color: var(--gold); margin-bottom: 6px; }
+#targetCard.empty .tc-head { color: var(--muted); }
+.tc-body { display: flex; gap: 12px; align-items: center; }
+#targetPortrait { width: 84px; height: 84px; flex: none; border-radius: 12px; background: radial-gradient(circle, rgba(241,196,15,0.25), rgba(180,138,92,0.35)); border: 1px solid var(--line); }
+#targetCard.empty #targetPortrait { opacity: 0.25; }
+.tc-info { min-width: 0; flex: 1; }
+#targetName { font: 22px/1.1 "Archivo Black", Impact, sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-look { display: flex; align-items: center; gap: 6px; margin: 3px 0 6px; font-size: 14px; }
+.tc-look b { color: #fff; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.5); flex: none; }
+.tc-meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.tc-meter i { font: 9px "Archivo Black", Impact, sans-serif; font-style: normal; text-align: center; letter-spacing: 0.06em; padding: 2px 0; border-radius: 3px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.35); }
+.tc-meter[data-b="0"] i:nth-child(-n+1),
+.tc-meter[data-b="1"] i:nth-child(-n+2),
+.tc-meter[data-b="2"] i:nth-child(-n+3),
+.tc-meter[data-b="3"] i { background: var(--gold); color: var(--ink); }
+.tc-meter[data-b="2"] i:nth-child(3) { background: var(--orange); }
+.tc-meter[data-b="3"] i:nth-child(4) { animation: blink 0.5s infinite alternate; }
+#targetBand { font: 12px "Archivo Black", Impact, sans-serif; margin-top: 5px; color: #ddd; }
+#targetBand[data-b] { color: inherit; }
+#targetCard[data-b="2"] #targetBand { color: var(--orange); }
+#targetCard[data-b="3"] #targetBand { color: var(--gold); }
+#targetCard .idtrack { width: 100%; }
+#feed { max-width: 340px; }
+.hideline { color: #b7e3a8; font-size: 13px; margin: 6px 0; }
+#actionBar { flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 560px); }
+@media (max-width: 1100px) { #actionBar { max-width: calc(100vw - 280px); } }
+#touch button.cool { opacity: 0.4; }
+@media (pointer: coarse) {
+  #btnPoison, #btnClone, #btnDecoy { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); color: #fff; font: 10px "Archivo Black", Impact, sans-serif; touch-action: none; background: rgba(155,140,240,0.4); }
+  #btnPoison { right: 108px; bottom: 200px; background: rgba(110,200,90,0.45); }
+  #btnPoison.on { background: rgba(110,200,90,0.9); box-shadow: 0 0 0 3px #7bd66b; }
+  #btnClone { right: 24px; bottom: 222px; }
+  #btnDecoy { right: 176px; bottom: 140px; }
+}
+@media (max-width: 640px) {
+  #targetCard { width: 230px; padding: 6px 8px; }
+  #targetPortrait { width: 52px; height: 52px; }
+  #targetName { font-size: 15px; }
+  .tc-look { font-size: 12px; }
+}
+/* layout fixes */
+#actionBar { max-width: none; gap: 4px; }
+.ab { padding: 5px 8px; font-size: 11px; }
+.ab kbd { font-size: 10px; padding: 0 4px; }
+@media (max-width: 1350px) { #actionBar { max-width: calc(100vw - 300px); } #status { bottom: 112px; } }
+#status { bottom: 66px; }
+.moves > div { grid-template-columns: 66px 110px 1fr; }
+@media (max-width: 1350px) { #actionBar .ab:last-child { display: none; } }
+@media (pointer: coarse) {
+  #btnSprint { right: 20px; bottom: 112px; width: 74px; height: 74px; }
+  #btnDust { right: 104px; bottom: 112px; width: 62px; height: 62px; }
+  #btnPoison { right: 20px; bottom: 198px; width: 62px; height: 62px; }
+  #btnClone { right: 92px; bottom: 186px; width: 56px; height: 56px; }
+  #btnDecoy { right: 176px; bottom: 116px; width: 56px; height: 56px; }
+}
+@media (max-width: 640px) {
+  .hud-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; }
+  .hud-left { width: 100%; }
+  #targetCard { width: 100%; }
+  .tc-look .label { display: none; }
+  .popup { top: 34%; }
+  .quit { left: auto; right: 12px; top: auto; bottom: 280px; transform: none; }
+}
+@media (max-width: 640px) { .popup { top: 30%; padding: 8px 14px; } .pop-title { font-size: 18px; } .pop-line { font-size: 13px; } }

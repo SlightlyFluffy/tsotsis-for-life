@@ -34,7 +34,7 @@
     WHIFF_CONTRACT: 15,
     WHIFF_COOLDOWN: 6,
     WHIFF_REVEAL: 5,
-    WHIFF_POINTS: 50,
+    WHIFF_POINTS: 1,
     STUN_TIME: 3,
     BUMP_STUN: 1.5,
     NPC_DOWN: 5,
@@ -44,7 +44,16 @@
     TREE_COVER: 26,
     MIN_PLAYERS: 3,
     MAX_PLAYERS: 5,
-    SCORE: { KILL: 100, LOW_PROFILE: 100, BLENDED: 150, UNSEEN: 100, STUN: 200 },
+    SCORE: { KILL: 5, POISON: 2, LOW_PROFILE: 1, BLENDED: 2, UNSEEN: 1, STUN: 3 },
+    KILL_LOCK: 0.9, // killer is committed to the strike animation
+    POISON_TIME: 5,
+    POISON_CD: 25,
+    CLONE_RANGE: 110,
+    CLONE_TIME: 15,
+    CLONE_CD: 30,
+    DECOY_RANGE: 170,
+    DECOY_TIME: 6,
+    DECOY_CD: 20,
   });
 
   // The five looks. Every player wears a different one and the crowd is full
@@ -103,6 +112,7 @@
     const obstacles = []; // collidable AABBs
     const trees = []; // {x, y, r} — trunk collides, canopy hides people
     const decor = []; // purely visual
+    const spots = []; // hiding spots: walk in and nobody can see you
     const zones = []; // special blocks
     const nodes = []; // NPC walking graph
 
@@ -182,6 +192,8 @@
             tree(cx + 74, cy - 14, 24);
             decor.push({ kind: 'bench', x: cx - 20, y: cy - 60, w: 40, h: 8 });
             decor.push({ kind: 'bench', x: cx - 20, y: cy + 56, w: 40, h: 8 });
+            spots.push({ kind: 'mielies', x: x0 + 8, y: cy - 30, w: 50, h: 60 });
+            spots.push({ kind: 'mielies', x: x0 + w - 58, y: cy - 30, w: 50, h: 60 });
           } else if (kind === 'spaza' || kind === 'shebeen') {
             sx = 30; sy = 70;
             const isSpaza = kind === 'spaza';
@@ -189,6 +201,8 @@
             obstacles.push({ x: x0 + 188, y: y0 + 96, w: 78, h: 120, kind: 'building', color: isSpaza ? '#2f7d6d' : '#7d3a5c', label: isSpaza ? 'AIRTIME' : 'TAVERN' });
             decor.push({ kind: 'drum', x: x0 + 120, y: y0 + h - 30 });
             decor.push({ kind: 'crate', x: x0 + 96, y: y0 + 150 });
+            spots.push({ kind: 'laundry', x: x0 + 104, y: y0 + 60, w: 68, h: 28 });
+            spots.push({ kind: 'skip', x: x0 + 14, y: y0 + h - 44, w: 46, h: 30 });
             tree(x0 + 230, y0 + 44, 26);
           }
           const hot = addNode(cx, cy, sx, sy, true);
@@ -214,6 +228,12 @@
                 tree(cellX + cw / 2, cellY + ch / 2, 24 + rnd() * 8);
                 continue;
               }
+              if (roll < 0.26) {
+                const kinds = [['mielies', 58, 48], ['skip', 46, 30], ['laundry', 62, 28]];
+                const [kind, sw, sh] = kinds[Math.floor(rnd() * kinds.length)];
+                spots.push({ kind, x: Math.round(cellX + cw / 2 - sw / 2), y: Math.round(cellY + ch / 2 - sh / 2), w: sw, h: sh });
+                continue;
+              }
               const sw = Math.round(cw - 2 * m - rnd() * cw * 0.22);
               const sh = Math.round(ch - 2 * m - rnd() * ch * 0.28);
               const sxp = Math.round(cellX + m + rnd() * (cw - 2 * m - sw));
@@ -236,6 +256,15 @@
       }
     }
 
+    // Skips on the road verges. Civilians wander through these too, so a
+    // full skip isn't always a player.
+    for (let k = 0; k < 14; k++) {
+      const j = Math.floor(rnd() * ny), i = Math.floor(rnd() * (nx - 1));
+      const x = RX[i] + 70 + rnd() * (RX[i + 1] - RX[i] - 140);
+      const side = rnd() < 0.5 ? -1 : 1;
+      spots.push({ kind: 'skip', x: Math.round(x - 23), y: Math.round(RY[j] + side * (RH - 15) - 14), w: 46, h: 28 });
+    }
+
     // Potholes and litter on the roads, just for flavour.
     for (let k = 0; k < 60; k++) {
       const horiz = rnd() < 0.5;
@@ -245,7 +274,7 @@
     }
 
     const spawnNodes = nodes.map((n, i) => i).filter((i) => !nodes[i].hot);
-    return { seed, obstacles, trees, decor, zones, nodes, spawnNodes };
+    return { seed, obstacles, trees, decor, zones, nodes, spawnNodes, spots };
   };
 
   // ---- physics ---------------------------------------------------------
@@ -296,6 +325,21 @@
   TFL.underTree = function (map, x, y) {
     for (const t of map.trees) if (Math.hypot(t.x - x, t.y - y) < C.TREE_COVER) return true;
     return false;
+  };
+
+  /** Index of the hiding spot containing (x, y), or -1. */
+  TFL.spotAt = function (map, x, y) {
+    for (let i = 0; i < map.spots.length; i++) {
+      const s = map.spots[i];
+      if (x > s.x && x < s.x + s.w && y > s.y && y < s.y + s.h) return i;
+    }
+    return -1;
+  };
+
+  /** Distance from a point to the edge of a spot (0 if inside). */
+  TFL.spotDist = function (s, x, y) {
+    const cx = Math.max(s.x, Math.min(x, s.x + s.w)), cy = Math.max(s.y, Math.min(y, s.y + s.h));
+    return Math.hypot(x - cx, y - cy);
   };
 
   TFL.makeTicker = function (ms, fn) {

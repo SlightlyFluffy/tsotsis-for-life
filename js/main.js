@@ -73,7 +73,7 @@
         return;
       }
       if (!this.players.some((p) => p.pid === pid)) return;
-      if ((msg.t === 'in' || msg.t === 'act') && this.game) this.game.handle(pid, msg);
+      if ((msg.t === 'in' || msg.t === 'act' || msg.t === 'ab') && this.game) this.game.handle(pid, msg);
       else if (msg.t === 'leave') this.drop(pid);
     }
 

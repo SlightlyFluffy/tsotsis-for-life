@@ -44,12 +44,16 @@
           <li>The compass only gives a <b>rough direction</b>. Up close it goes quiet, so pick your mark out by their outfit, then watch them for a moment to <b>identify</b> them.</li>
         </ul>
         <div class="moves">
-          <div><kbd>Click</kbd><b>Take out</b> Click your contract. Walking only: running strikes fail.</div>
-          <div><kbd>Click</kbd><b>Klap</b> Click someone who is hunting you to stun them (+200).</div>
-          <div><kbd>Q</kbd><b>Kick dust</b> Stun everyone next to you for 2.5s. 20s cooldown.</div>
-          <div><kbd>Shift</kbd><b>Run</b> Fast, but loud. Your target sees you coming.</div>
+          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Click your contract when you're right next to them. Walking only: running strikes fail.</div>
+          <div><kbd>R-Click</kbd><b>Poison · 2 pts</b> Silent. They don't know, and they drop 5s later, giving you time to walk away. 25s cooldown.</div>
+          <div><kbd>Click</kbd><b>Klap · 3 pts</b> Click someone hunting you to stun them and wreck their contract.</div>
+          <div><kbd>E</kbd><b>Clone</b> Everyone near you takes on your look for 15s. Breaks your hunters' lock. 30s cooldown.</div>
+          <div><kbd>F</kbd><b>Decoy</b> Someone near you, dressed as you, bolts. Your hunters lose track of you. 20s cooldown.</div>
+          <div><kbd>Q</kbd><b>Kick dust</b> Stuns everyone right next to you for 2.5s. Your escape. 20s cooldown.</div>
+          <div><kbd>Shift</kbd><b>Run</b> Fast but loud. Run near your target and they'll see you coming.</div>
         </div>
-        <p class="warnline">Hit the <b>wrong person</b>: −50 points, no strikes for 6s, no contract for 15s, and the scream gives you away to your hunters.</p>
+        <p class="hideline"><b>Hiding spots</b> (mielie patches, skip bins, laundry lines): walk in and nobody can see you. You can strike out of them, and you can click a spot to strike whoever is hiding inside. Civilians wander through them too, so be careful.</p>
+        <p class="warnline">Hit the <b>wrong person</b>: −1 point, no strikes for 6s, no contract for 15s, and the scream gives you away to your hunters.</p>
         <div class="keys">
           <span><kbd>WASD</kbd> move</span>
           <span><kbd>Tab</kbd> scores</span>
@@ -114,7 +118,22 @@
   <div id="hud" hidden>
     <div id="vignette"></div>
     <div class="hud-top">
-      <div id="feed"></div>
+      <div class="hud-left">
+        <div id="targetCard" class="empty">
+          <div class="tc-head">YOUR CONTRACT</div>
+          <div class="tc-body">
+            <canvas id="targetPortrait" width="120" height="120"></canvas>
+            <div class="tc-info">
+              <div id="targetName">No contract</div>
+              <div class="tc-look"><span class="label">LOOK FOR</span><span id="targetSwatch" class="swatch"></span><b id="targetLook">—</b></div>
+              <div id="tcMeter" class="tc-meter"><i>FAR</i><i>NEAR</i><i>CLOSE</i><i>SEEN</i></div>
+              <div id="targetBand"></div>
+              <div class="idtrack"><div id="idBar"></div></div>
+            </div>
+          </div>
+        </div>
+        <div id="feed"></div>
+      </div>
       <div id="timer">0:00</div>
       <div class="hud-right">
         <div class="myscore"><span class="label">SCORE</span><span id="myScore">0</span></div>
@@ -124,16 +143,6 @@
     <div id="popup" class="popup"></div>
     <div id="status"></div>
 
-    <div id="targetCard" class="card empty">
-      <canvas id="targetPortrait" width="72" height="72"></canvas>
-      <div>
-        <div class="label">CONTRACT</div>
-        <div id="targetName"></div>
-        <div id="targetLook"></div>
-        <div id="targetBand"></div>
-        <div class="idtrack"><div id="idBar"></div></div>
-      </div>
-    </div>
     <div id="huntCard" class="card">
       <div class="hunt-count" id="huntCount">0</div>
       <div>
@@ -143,36 +152,48 @@
     </div>
 
     <div id="actionBar">
-      <div class="ab" id="abE"><kbd>Click</kbd><span id="abELabel">Take out / Klap</span></div>
-      <div class="ab" id="abQ"><kbd>Q</kbd><span id="abQLabel">Kick dust</span></div>
-      <div class="ab" id="abShift"><kbd>Shift</kbd><span>Run (loud)</span></div>
+      <div class="ab" id="abKill"><kbd>Click</kbd><span id="abKillLabel">Kill +5</span></div>
+      <div class="ab" id="abPoison"><kbd>R-Click</kbd><span id="abPoisonLabel">Poison +2</span></div>
+      <div class="ab" id="abClone"><kbd>E</kbd><span id="abCloneLabel">Clone</span></div>
+      <div class="ab" id="abDecoy"><kbd>F</kbd><span id="abDecoyLabel">Decoy</span></div>
+      <div class="ab" id="abDust"><kbd>Q</kbd><span id="abDustLabel">Dust</span></div>
+      <div class="ab" id="abShift"><kbd>Shift</kbd><span>Run</span></div>
       <div class="ab"><kbd>H</kbd><span>Help</span></div>
     </div>
 
     <div id="briefing" class="overlay-card" hidden>
       <div class="label">YOUR MOVES</div>
       <div class="moves">
-        <div><kbd>Click</kbd><b>Take out</b> Walk up to your contract and click on them. Only works while walking: no running strikes.</div>
-        <div><kbd>Click</kbd><b>Klap</b> Click someone hunting you to stun them and wreck their contract (+200).</div>
-        <div><kbd>Q</kbd><b>Kick dust</b> Stuns everyone right next to you for 2.5s. Your escape. 20s cooldown, and everyone sees the cloud.</div>
-        <div><kbd>Shift</kbd><b>Run</b> Fast but loud. Run near your target and they'll see you coming.</div>
+          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Click your contract when you're right next to them. Walking only: running strikes fail.</div>
+          <div><kbd>R-Click</kbd><b>Poison · 2 pts</b> Silent. They don't know, and they drop 5s later, giving you time to walk away. 25s cooldown.</div>
+          <div><kbd>Click</kbd><b>Klap · 3 pts</b> Click someone hunting you to stun them and wreck their contract.</div>
+          <div><kbd>E</kbd><b>Clone</b> Everyone near you takes on your look for 15s. Breaks your hunters' lock. 30s cooldown.</div>
+          <div><kbd>F</kbd><b>Decoy</b> Someone near you, dressed as you, bolts. Your hunters lose track of you. 20s cooldown.</div>
+          <div><kbd>Q</kbd><b>Kick dust</b> Stuns everyone right next to you for 2.5s. Your escape. 20s cooldown.</div>
+          <div><kbd>Shift</kbd><b>Run</b> Fast but loud. Run near your target and they'll see you coming.</div>
       </div>
-      <div class="brief-foot">Hit the <b>wrong person</b>: −50, no strikes for 6s, no contract for 15s, and your hunters get a lock on you. Press <kbd>H</kbd> any time for help.</div>
+      <div class="brief-foot">Hit the <b>wrong person</b>: −1 point, no strikes for 6s, no contract for 15s, and the scream gives you away to your hunters. Press <kbd>H</kbd> any time for help.</div>
     </div>
 
     <div id="help" class="overlay-card" hidden>
       <div class="label">HOW IT WORKS · press H to close</div>
       <div class="moves">
-        <div><kbd>Click</kbd><b>Take out</b> Your contract, while walking. Base 100, +100 low profile, +150 blended in, +100 never spotted.</div>
-        <div><kbd>Click</kbd><b>Klap</b> Someone hunting you, +200. They're stunned and lose the contract.</div>
-        <div><kbd>Q</kbd><b>Kick dust</b> Stuns everyone within reach for 2.5s. 20s cooldown.</div>
-        <div><kbd>Shift</kbd><b>Run</b> Can't strike for 1s after. Exposes you if your target is near.</div>
+          <div><kbd>Click</kbd><b>Kill · 5 pts</b> Click your contract when you're right next to them. Walking only: running strikes fail.</div>
+          <div><kbd>R-Click</kbd><b>Poison · 2 pts</b> Silent. They don't know, and they drop 5s later, giving you time to walk away. 25s cooldown.</div>
+          <div><kbd>Click</kbd><b>Klap · 3 pts</b> Click someone hunting you to stun them and wreck their contract.</div>
+          <div><kbd>E</kbd><b>Clone</b> Everyone near you takes on your look for 15s. Breaks your hunters' lock. 30s cooldown.</div>
+          <div><kbd>F</kbd><b>Decoy</b> Someone near you, dressed as you, bolts. Your hunters lose track of you. 20s cooldown.</div>
+          <div><kbd>Q</kbd><b>Kick dust</b> Stuns everyone right next to you for 2.5s. Your escape. 20s cooldown.</div>
+          <div><kbd>Shift</kbd><b>Run</b> Fast but loud. Run near your target and they'll see you coming.</div>
       </div>
       <ul>
-        <li><b>Finding your target:</b> far away the wedge gives a rough direction. Up close the compass goes quiet (just a pulse), so look for their outfit. Watch them for 1.5s to <b>identify</b> them (gold ring). You can't identify someone blending into a crowd or under a tree.</li>
-        <li><b>Wrong person</b> (a civilian or the wrong player): −50, no strikes for 6s, no new contract for 15s, and the scream reveals you to your hunters for 5s.</li>
-        <li><b>Striking:</b> you hit exactly the person you click (or tap), and only if they're right next to you. A white ring shows who a click would hit.</li>
-        <li><b>Being hunted:</b> the right card shows how many are after you and how close. Anyone who runs at you gets marked red.</li>
+        <li><b>Finding your target:</b> the card at the top left shows who they are and what they're wearing. Far away the wedge gives a rough direction. Up close the compass goes quiet (just a pulse), so look for their outfit. Watch them for 1.5s to <b>identify</b> them (gold ring). You can't identify someone blending in, under a tree or in a hiding spot.</li>
+        <li><b>Hiding spots</b> (mielie patches, skip bins, laundry lines): walk in and nobody can see you. You can strike out of them, and you can click a spot to strike whoever is hiding inside. Civilians wander through them too, so be careful.</li>
+        <li><b>Kill bonuses:</b> +1 low profile, +2 blended in or from hiding, +1 never spotted.</li>
+        <li><b>Wrong person</b> (a civilian or the wrong player): −1, no strikes for 6s, no new contract for 15s, and the scream reveals you to your hunters for 5s. A wrong poison is silent, but you still lose the contract.</li>
+        <li><b>Striking:</b> you hit exactly who you click (or tap), and only if they're right next to you. A white ring shows who a click would hit.</li>
+        <li><b>Civilians</b> are unpredictable: they turn back, stop dead, jog, and sometimes tail people. Don't assume.</li>
+        <li><b>Being hunted:</b> the bottom-right card shows how many are after you and how close. Anyone who runs at you gets marked red.</li>
       </ul>
     </div>
 
@@ -186,6 +207,9 @@
       <div id="joystick"><div id="joyKnob"></div></div>
       <button id="btnSprint">RUN</button>
       <button id="btnDust">DUST</button>
+      <button id="btnPoison">POISON</button>
+      <button id="btnClone">CLONE</button>
+      <button id="btnDecoy">DECOY</button>
     </div>
   </div>
 

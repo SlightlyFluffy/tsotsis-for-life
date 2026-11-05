@@ -73,6 +73,10 @@
       this.onPointer = this.onPointer.bind(this);
       this.canvas.addEventListener('pointermove', this.onPointer);
       this.canvas.addEventListener('pointerdown', this.onPointer);
+      this.noMenu = (e) => e.preventDefault();
+      this.canvas.addEventListener('contextmenu', this.noMenu);
+      this.downAt = new Map();
+      this.poisonArmed = false;
       window.addEventListener('keydown', this.onKey);
       window.addEventListener('keyup', this.onKey);
       window.addEventListener('blur', () => this.keys.clear());
@@ -97,6 +101,7 @@
       window.removeEventListener('resize', this.onResize);
       this.canvas.removeEventListener('pointermove', this.onPointer);
       this.canvas.removeEventListener('pointerdown', this.onPointer);
+      this.canvas.removeEventListener('contextmenu', this.noMenu);
       $('hud').hidden = true;
       $('vignette').style.opacity = 0;
     }
@@ -105,11 +110,13 @@
     onKey(e) {
       if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
       const k = e.key.toLowerCase();
-      const handled = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift', 'tab', 'q', 'h', '?'];
+      const handled = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'shift', 'tab', 'q', 'e', 'f', 'h', '?'];
       if (!handled.includes(k)) return;
       e.preventDefault();
       if (e.type === 'keydown') {
-        if (k === 'q' && !e.repeat) this.dust();
+        if (k === 'q' && !e.repeat) this.ability('dust');
+        if (k === 'e' && !e.repeat) this.ability('clone');
+        if (k === 'f' && !e.repeat) this.ability('decoy');
         if ((k === 'h' || k === '?') && !e.repeat) $('help').hidden = !$('help').hidden;
         if (/^[wasd]$|^arrow/.test(k) && performance.now() - this.startedAt > 2500) $('briefing').hidden = true;
         if (k === 'tab') $('scoreboard').classList.add('expanded');
@@ -120,42 +127,63 @@
       }
     }
 
-    /** Which body is under this screen point (CSS px)? */
+    toWorld(sx, sy) {
+      const r = this.renderer;
+      return { x: (sx - r.vw / 2) / r.zoom + r.cam.x, y: (sy - r.vh / 2) / r.zoom + r.cam.y };
+    }
+
+    /** What a click at this screen point (CSS px) would hit: a hiding spot or a visible body. */
     pickAt(sx, sy) {
       const r = this.renderer;
       if (!r.cam || !this.lastEnts) return null;
-      const wx = (sx - r.vw / 2) / r.zoom + r.cam.x, wy = (sy - r.vh / 2) / r.zoom + r.cam.y;
+      const w = this.toWorld(sx, sy);
+      const si = TFL.spotAt(this.map, w.x, w.y);
+      if (si >= 0) {
+        const s = this.map.spots[si];
+        return { spot: si, inReach: TFL.spotDist(s, this.pos.x, this.pos.y) < C.ACTION_RANGE - 6 };
+      }
       let best = null, bd = 18;
       for (const e of this.lastEnts) {
-        if (e.id === this.me.id || e.flags & 1) continue;
-        const d = Math.hypot(e.x - wx, e.y - wy);
+        if (e.id === this.me.id || e.flags & 1 || e.covered) continue; // can't click who you can't see
+        const d = Math.hypot(e.x - w.x, e.y - w.y);
         if (d < bd) { bd = d; best = e; }
       }
-      return best;
+      return best && { id: best.id, x: best.x, y: best.y, inReach: Math.hypot(best.x - this.pos.x, best.y - this.pos.y) < C.ACTION_RANGE + 6 };
     }
 
-    act(sx, sy) {
+    act(sx, sy, kind) {
       const now = performance.now();
       if (now - this.lastAct < 300 || !this.me || this.me.st !== 0) return;
-      const e = this.pickAt(sx, sy);
-      if (!e) return;
+      if (kind === 'poison' && this.me.cds.po > 0) return;
+      const h = this.pickAt(sx, sy);
+      if (!h) return;
       this.lastAct = now;
-      this.myFacing = Math.atan2(e.y - this.pos.y, e.x - this.pos.x);
-      this.swing = { until: now / 1000 + 0.25 };
+      const at = h.spot !== undefined ? this.map.spots[h.spot] : h;
+      const tx = h.spot !== undefined ? at.x + at.w / 2 : at.x, ty = h.spot !== undefined ? at.y + at.h / 2 : at.y;
+      this.myFacing = Math.atan2(ty - this.pos.y, tx - this.pos.x);
+      this.swing = { until: now / 1000 + 0.25, poison: kind === 'poison' };
       sfx('swing');
-      this.send({ t: 'act', id: e.id });
+      const msg = { t: 'act', kind };
+      if (h.spot !== undefined) msg.spot = h.spot; else msg.id = h.id;
+      this.send(msg);
     }
 
     onPointer(e) {
       const r = this.canvas.getBoundingClientRect();
       const sx = e.clientX - r.left, sy = e.clientY - r.top;
-      if (e.type === 'pointermove') { this.mouse = { x: sx, y: sy }; return; }
-      if (e.type === 'pointerdown' && e.button === 0) { this.mouse = { x: sx, y: sy }; this.act(sx, sy); }
+      this.mouse = { x: sx, y: sy };
+      if (e.type !== 'pointerdown') return;
+      if (e.button === 2) this.act(sx, sy, 'poison');
+      else if (e.button === 0) {
+        this.act(sx, sy, this.poisonArmed ? 'poison' : 'strike');
+        if (this.poisonArmed) { this.poisonArmed = false; $('btnPoison').classList.remove('on'); }
+      }
     }
 
-    dust() {
-      if (!this.me || this.me.st !== 0 || this.me.dc > 0) return;
-      this.send({ t: 'dust' });
+    ability(k) {
+      const key = { dust: 'du', clone: 'cl', decoy: 'de' }[k];
+      if (!this.me || this.me.st !== 0 || this.me.cds[key] > 0) return;
+      this.send({ t: 'ab', k });
     }
 
     setupTouch() {
@@ -197,7 +225,11 @@
       const sprint = $('btnSprint');
       sprint.addEventListener('touchstart', (e) => { TFL.touch.sprint = true; sprint.classList.add('on'); e.preventDefault(); }, { passive: false });
       sprint.addEventListener('touchend', () => { TFL.touch.sprint = false; sprint.classList.remove('on'); });
-      $('btnDust').addEventListener('touchstart', (e) => { TFL.client && TFL.client.dust(); e.preventDefault(); }, { passive: false });
+      const tap = (id, fn) => $(id).addEventListener('touchstart', (e) => { if (TFL.client) fn(TFL.client); e.preventDefault(); }, { passive: false });
+      tap('btnDust', (c) => c.ability('dust'));
+      tap('btnClone', (c) => c.ability('clone'));
+      tap('btnDecoy', (c) => c.ability('decoy'));
+      tap('btnPoison', (c) => { c.poisonArmed = !c.poisonArmed; $('btnPoison').classList.toggle('on', c.poisonArmed); });
     }
 
     inputDir() {
@@ -309,6 +341,9 @@
           e.phase = moving ? this.myPhase : 0;
           continue;
         }
+        if (e.flags & 1) { if (!this.downAt.has(e.id)) this.downAt.set(e.id, t); }
+        else this.downAt.delete(e.id);
+        e.fall = e.flags & 1 ? Math.min(1, (t - this.downAt.get(e.id)) / 0.45) : 0;
         let f = this.facing.get(e.id);
         if (!f) { f = { x: e.x, y: e.y, a: Math.random() * 6.28, p: 0 }; this.facing.set(e.id, f); }
         const dx = e.x - f.x, dy = e.y - f.y, d = Math.hypot(dx, dy);
@@ -318,13 +353,9 @@
         e.phase = d > 0.15 ? f.p : 0;
       }
 
+      for (const e of ents) e.covered = TFL.spotAt(this.map, e.x, e.y) >= 0;
       this.lastEnts = ents;
-      let hover = null;
-      if (this.mouse && this.me && this.me.st === 0 && this.pos) {
-        const h = this.pickAt(this.mouse.x, this.mouse.y);
-        if (h) hover = { id: h.id, inReach: Math.hypot(h.x - this.pos.x, h.y - this.pos.y) < C.ACTION_RANGE + 6 };
-      }
-      this.hover = hover;
+      this.hover = this.mouse && this.me && this.me.st === 0 && this.pos ? this.pickAt(this.mouse.x, this.mouse.y) : null;
 
       const camSrc = this.pos || { x: C.W / 2, y: C.H / 2 };
       const cam = this.cam || { x: camSrc.x, y: camSrc.y };
@@ -341,34 +372,47 @@
         swing: this.swing,
         fx: this.fx,
         hover: this.hover,
+        poisonArmed: this.poisonArmed,
+        meSpot: !!(me && me.sp),
       });
       this.updateHud(now);
     }
 
     updateActionBar(me) {
-      // E: tell the player what E would do *right now*, without leaking who
-      // anyone is (only uses things they already know: a locked target or an
-      // exposed hunter).
-      let eLabel = 'Take out / Klap', eState = '';
-      const myEnt = this.pos;
+      // Tell the player what a click would do right now, using only what they
+      // already know (a locked target or an exposed hunter) so nothing leaks.
       const near = (id) => {
-        if (!id || !myEnt) return false;
+        if (!id || !this.pos) return false;
         const s = this.snaps[this.snaps.length - 1];
         const e = s && s.ents.get(id);
-        return e && Math.hypot(e[1] - myEnt.x, e[2] - myEnt.y) < C.ACTION_RANGE;
+        return e && Math.hypot(e[1] - this.pos.x, e[2] - this.pos.y) < C.ACTION_RANGE;
       };
-      if (me.st !== 0) { eState = 'off'; eLabel = me.st === 1 ? 'Down' : 'Stunned'; }
-      else if (me.cd > 0.5) { eState = 'off'; eLabel = 'Wait ' + Math.ceil(me.cd) + 's'; }
-      else if (!me.calm || (this.moving && this.inputDir().sprint)) { eState = 'off'; eLabel = 'Too loud — walk'; }
-      else if (me.tgt && near(me.tgt.id)) { eState = 'ready'; eLabel = 'Click them: TAKE OUT'; }
-      else if (me.exp.some(near)) { eState = 'ready'; eLabel = 'Click them: KLAP'; }
-      else if (this.hover && this.hover.inReach) { eLabel = 'Click to strike'; }
-      this.setText('abELabel', eLabel);
-      $('abE').dataset.state = eState;
-      const dc = me.dc || 0;
-      this.setText('abQLabel', dc > 0 ? 'Kick dust ' + dc + 's' : 'Kick dust');
-      $('abQ').dataset.state = me.st !== 0 || dc > 0 ? 'off' : '';
-      $('abShift').dataset.state = this.moving && this.inputDir().sprint ? 'warn' : '';
+      let label = 'Kill  +5', state = '';
+      const loud = !me.calm || (this.moving && this.inputDir().sprint);
+      if (me.st === 1) { state = 'off'; label = 'Down'; }
+      else if (me.st === 2) { state = 'off'; label = 'Stunned'; }
+      else if (me.cd > 0.5) { state = 'off'; label = 'Wait ' + Math.ceil(me.cd) + 's'; }
+      else if (loud) { state = 'off'; label = 'Too loud — walk'; }
+      else if (me.tgt && near(me.tgt.id)) { state = 'ready'; label = 'KILL THEM  +5'; }
+      else if (me.exp.some(near)) { state = 'ready'; label = 'KLAP HUNTER  +3'; }
+      else if (this.hover && this.hover.inReach) label = this.hover.spot !== undefined ? 'Search spot' : 'Strike';
+      this.setText('abKillLabel', label);
+      $('abKill').dataset.state = state;
+      const busy = me.st !== 0 || loud;
+      const cd = (id, base, secs, blockedByLoud) => {
+        this.setText(id + 'Label', secs > 0 ? base + ' ' + secs + 's' : base);
+        $(id).dataset.state = me.st !== 0 || secs > 0 || (blockedByLoud && loud) ? 'off' : '';
+      };
+      cd('abPoison', 'Poison +2', me.cds.po, true);
+      if (this.poisonArmed) $('abPoison').dataset.state = 'ready';
+      cd('abClone', 'Clone', me.cds.cl, false);
+      cd('abDecoy', 'Decoy', me.cds.de, false);
+      cd('abDust', 'Dust', me.cds.du, false);
+      $('abShift').dataset.state = this.moving && this.inputDir().sprint ? 'warn' : busy ? 'off' : '';
+      for (const [b, k] of [['btnPoison', 'po'], ['btnClone', 'cl'], ['btnDecoy', 'de'], ['btnDust', 'du']]) {
+        const el = $(b);
+        if (el) { el.classList.toggle('cool', me.cds[k] > 0); el.dataset.cd = me.cds[k] > 0 ? me.cds[k] : ''; }
+      }
     }
 
     setText(id, text) {
@@ -394,7 +438,7 @@
         this.setHtml('scoreboard', this.sb.map((r, i) => `<div class="sb-row"><span class="sb-rank">${i + 1}</span><span class="sb-dot" style="background:${TFL.STYLES[r[2]].shirt}"></span><span class="sb-name">${TFL.esc(r[0])}</span><span class="sb-score">${r[1]}</span></div>`).join(''));
       }
 
-      // contract card
+      // contract card (top left)
       const tg = me.tgt;
       const key = tg ? 'T' + tg.s + tg.n : 'none';
       if (this.hudCache.portrait !== key) {
@@ -403,21 +447,26 @@
         if (tg) TFL.drawPortrait(pc, tg.s);
         else pc.getContext('2d').clearRect(0, 0, pc.width, pc.height);
         $('targetCard').classList.toggle('empty', !tg);
+        $('targetSwatch').style.background = tg ? TFL.STYLES[tg.s].shirt : 'transparent';
       }
+      const meter = $('tcMeter');
       if (tg) {
         this.setText('targetName', tg.n);
-        this.setText('targetLook', 'Look for: ' + TFL.STYLES[tg.s].name);
-        let band = ['Far away — follow the wedge', 'Getting warmer', 'Close — pick them out of the crowd', 'IDENTIFIED — walk up and click them'][tg.b];
-        if (tg.b === 2 && tg.h) band = 'Close, but blending in — can’t make them out';
-        else if (tg.b === 2 && tg.ip > 0) band = 'Identifying… keep watching';
+        this.setText('targetLook', TFL.STYLES[tg.s].name);
+        let band = ['Far away — follow the wedge', 'Getting warmer — keep following', 'Close! Pick them out of the crowd', 'IDENTIFIED — walk up and click them'][tg.b];
+        if (tg.b === 2 && tg.h) band = 'Close, but hiding — can’t make them out';
+        else if (tg.b === 2 && tg.ip > 0) band = 'Identifying… keep watching them';
         this.setText('targetBand', band);
         $('idBar').style.width = (tg.b === 3 ? 100 : tg.b === 2 ? Math.round((tg.ip || 0) * 100) : 0) + '%';
-        $('targetBand').dataset.b = tg.b;
+        $('targetCard').dataset.b = tg.b;
+        meter.dataset.b = tg.b;
       } else {
-        this.setText('targetName', me.st === 1 ? '—' : 'Waiting for a contract');
-        this.setText('targetLook', me.ct > 0 ? 'New contract in ' + me.ct + 's' : '');
-        this.setText('targetBand', '');
+        this.setText('targetName', me.st === 1 ? 'You’re down' : 'No contract');
+        this.setText('targetLook', '—');
+        this.setText('targetBand', me.ct > 0 ? 'New contract in ' + me.ct + 's' : 'Waiting…');
         $('idBar').style.width = '0%';
+        $('targetCard').dataset.b = -1;
+        meter.dataset.b = -1;
       }
       this.updateActionBar(me);
 
@@ -432,7 +481,8 @@
       // status chips
       const chips = [];
       if (me.st === 0) {
-        if (me.bl) chips.push('<span class="chip good">BLENDED</span>');
+        if (me.sp) chips.push('<span class="chip good">HIDING</span>');
+        else if (me.bl) chips.push('<span class="chip good">BLENDED</span>');
         if (this.moving && this.inputDir().sprint) chips.push('<span class="chip warn">SPRINTING — conspicuous</span>');
         if (me.ex) chips.push('<span class="chip bad">EXPOSED</span>');
         if (me.cd > 0.5) chips.push('<span class="chip warn">CAN’T STRIKE ' + me.cd.toFixed(0) + 's</span>');

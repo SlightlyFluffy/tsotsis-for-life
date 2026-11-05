@@ -22,9 +22,18 @@
   }
 
   /** Draws a person centred at (0,0), facing +x after rotation. */
-  function drawPerson(ctx, style, skin, facing, phase, flags, t) {
+  function drawPerson(ctx, style, skin, facing, phase, flags, t, fall) {
     const S = TFL.STYLES[style];
-    const down = flags & 1;
+    let down = flags & 1;
+    if (down && fall !== undefined && fall < 0.6) {
+      // crumpling: buckle, sway, then hit the ground
+      ctx.save();
+      ctx.rotate(Math.sin(fall * 18) * 0.35 * (1 - fall));
+      ctx.scale(1 + fall * 0.25, 1 - fall * 0.45);
+      drawPerson(ctx, style, skin, facing, 0, flags & ~1, t);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
@@ -257,6 +266,13 @@
       for (const o of map.obstacles) if (o.kind !== 'trunk' && vis(o.x, o.y, o.w, o.h)) ctx.fillRect(o.x + 5, o.y + 6, o.w, o.h);
       for (const o of map.obstacles) if (vis(o.x, o.y, o.w, o.h)) this.drawObstacle(ctx, o);
 
+      // hiding spots — the ground under them
+      for (const s of map.spots) {
+        if (!vis(s.x, s.y, s.w, s.h)) continue;
+        ctx.fillStyle = s.kind === 'mielies' ? '#6d5a2e' : 'rgba(0,0,0,0.25)';
+        ctx.fillRect(s.x, s.y, s.w, s.h);
+      }
+
       // overlays under feet
       for (const e of view.ents) {
         if (e.id === view.meId) {
@@ -275,15 +291,23 @@
       for (const e of ents) {
         ctx.save();
         ctx.translate(e.x, e.y);
-        drawPerson(ctx, e.style, TFL.SKINS[TFL.hash(e.id) % TFL.SKINS.length], e.facing, e.phase, e.flags, view.t);
+        drawPerson(ctx, e.style, TFL.SKINS[TFL.hash(e.id) % TFL.SKINS.length], e.facing, e.phase, e.flags, view.t, e.fall);
+        if (e.flags & 8) {
+          // committed to a strike
+          ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, 18, e.facing - 0.6, e.facing + 0.6);
+          ctx.stroke();
+        }
         ctx.restore();
       }
 
       // hover ring: who a click would hit (shown the same for everyone)
-      if (view.hover) {
+      if (view.hover && view.hover.id) {
         const h = view.ents.find((e) => e.id === view.hover.id);
         if (h) {
-          ctx.strokeStyle = view.hover.inReach ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)';
+          ctx.strokeStyle = view.poisonArmed ? 'rgba(123,214,107,0.9)' : view.hover.inReach ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)';
           ctx.lineWidth = 2;
           ctx.setLineDash(view.hover.inReach ? [] : [3, 4]);
           ctx.beginPath();
@@ -298,12 +322,39 @@
         const me = view.ents.find((e) => e.id === view.meId);
         if (me) {
           const k = 1 - (view.swing.until - view.t) / 0.25;
-          ctx.strokeStyle = 'rgba(255,255,255,' + (0.8 - k * 0.8) + ')';
+          ctx.strokeStyle = (view.swing.poison ? 'rgba(123,214,107,' : 'rgba(255,255,255,') + (0.8 - k * 0.8) + ')';
           ctx.lineWidth = 3;
           ctx.beginPath();
           ctx.arc(me.x, me.y, C.ACTION_RANGE * (0.6 + k * 0.4), me.facing - 0.9, me.facing + 0.9);
           ctx.stroke();
         }
+      }
+
+      // hiding spot covers: whoever is inside can't be seen
+      for (const s of map.spots) {
+        if (!vis(s.x - 10, s.y - 10, s.w + 20, s.h + 20)) continue;
+        let rustle = 0;
+        for (const e of view.ents) if (e.covered && e.phase && e.x > s.x && e.x < s.x + s.w && e.y > s.y && e.y < s.y + s.h) rustle = 1;
+        this.drawSpot(ctx, s, rustle ? Math.sin(view.t * 30) * 1.5 : 0, view.t);
+      }
+      if (view.meSpot) {
+        const me0 = view.ents.find((e) => e.id === view.meId);
+        if (me0) {
+          ctx.globalAlpha = 0.45;
+          ctx.save(); ctx.translate(me0.x, me0.y);
+          drawPerson(ctx, me0.style, '#7d4f30', me0.facing, me0.phase, 0, view.t);
+          ctx.restore();
+          ctx.globalAlpha = 1;
+          this.label(ctx, me0.x, me0.y - 26, 'HIDING', '#7bd66b');
+        }
+      }
+      if (view.hover && view.hover.spot !== undefined) {
+        const s = map.spots[view.hover.spot];
+        ctx.strokeStyle = view.poisonArmed ? 'rgba(123,214,107,0.9)' : view.hover.inReach ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash(view.hover.inReach ? [] : [3, 4]);
+        ctx.strokeRect(s.x - 3, s.y - 3, s.w + 6, s.h + 6);
+        ctx.setLineDash([]);
       }
 
       // tree canopies: you can lurk under these
@@ -369,17 +420,72 @@
         ctx.stroke();
       }
 
-      // dust clouds
+      // effects
       for (const f of view.fx || []) {
-        const k = (view.t - f.at) / 1.2;
+        const life = f.k === 'decoy' ? 2.5 : f.k === 'kill' ? 0.9 : 1.2;
+        const k = (view.t - f.at) / life;
         if (k < 0 || k > 1) continue;
-        for (let i = 0; i < 9; i++) {
-          const ang = i * 0.7 + f.x;
-          const rr = C.DUST_RANGE * (0.3 + k * 0.8) * (0.6 + (i % 3) * 0.2);
-          ctx.fillStyle = 'rgba(214,180,130,' + 0.55 * (1 - k) + ')';
+        if (f.k === 'dust') {
+          for (let i = 0; i < 9; i++) {
+            const ang = i * 0.7 + f.x;
+            const rr = C.DUST_RANGE * (0.3 + k * 0.8) * (0.6 + (i % 3) * 0.2);
+            ctx.fillStyle = 'rgba(214,180,130,' + 0.55 * (1 - k) + ')';
+            ctx.beginPath();
+            ctx.arc(f.x + Math.cos(ang) * rr * 0.6, f.y + Math.sin(ang) * rr * 0.6, rr * 0.55, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (f.k === 'kill') {
+          // the strike: a slash from the killer, then an impact burst
+          const a = Math.atan2(f.y - f.fy, f.x - f.fx);
+          ctx.strokeStyle = 'rgba(255,255,255,' + (1 - k) + ')';
+          ctx.lineWidth = 4 * (1 - k) + 1;
           ctx.beginPath();
-          ctx.arc(f.x + Math.cos(ang) * rr * 0.6, f.y + Math.sin(ang) * rr * 0.6, rr * 0.55, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.arc(f.fx, f.fy, 22, a - 1.1 + k * 0.6, a + 0.4 + k * 1.2);
+          ctx.stroke();
+          for (let i = 0; i < 10; i++) {
+            const ang = (i / 10) * Math.PI * 2 + f.x;
+            const r0 = 8 + k * 30, r1 = r0 + 8 * (1 - k);
+            ctx.strokeStyle = i % 2 ? 'rgba(241,196,15,' + (1 - k) + ')' : 'rgba(200,40,30,' + (1 - k) + ')';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(f.x + Math.cos(ang) * r0, f.y + Math.sin(ang) * r0);
+            ctx.lineTo(f.x + Math.cos(ang) * r1, f.y + Math.sin(ang) * r1);
+            ctx.stroke();
+          }
+        } else if (f.k === 'poison') {
+          for (let i = 0; i < 7; i++) {
+            const ang = i * 0.9 + f.y;
+            ctx.fillStyle = 'rgba(110,200,90,' + 0.5 * (1 - k) + ')';
+            ctx.beginPath();
+            ctx.arc(f.x + Math.cos(ang) * 14 * k, f.y - 20 * k + Math.sin(ang) * 10 * k, 6 + 8 * k, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (f.k === 'klap') {
+          ctx.fillStyle = 'rgba(255,224,102,' + (1 - k) + ')';
+          for (let i = 0; i < 5; i++) {
+            const ang = (i / 5) * Math.PI * 2 + k * 3;
+            ctx.beginPath();
+            ctx.arc(f.x + Math.cos(ang) * (10 + k * 18), f.y + Math.sin(ang) * (10 + k * 18), 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (f.k === 'clone') {
+          ctx.strokeStyle = 'rgba(155,140,240,' + (1 - k) + ')';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y, C.CLONE_RANGE * k, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (f.k === 'decoy') {
+          const d = view.ents.find((e) => e.id === f.id);
+          if (d) {
+            ctx.strokeStyle = 'rgba(155,140,240,' + (1 - k) + ')';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, 16, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            this.label(ctx, d.x, d.y - 26, 'YOUR DECOY', '#9b8cf0');
+          }
         }
       }
 
@@ -389,6 +495,65 @@
       ctx.fillRect(-2000, C.H, C.W + 4000, 2000);
       ctx.fillRect(-2000, 0, 2000, C.H);
       ctx.fillRect(C.W, 0, 2000, C.H);
+    }
+
+    drawSpot(ctx, s, j, t) {
+      ctx.save();
+      ctx.translate(j, 0);
+      if (s.kind === 'mielies') {
+        // a patch of tall maize
+        const rnd = TFL.mulberry32(s.x * 31 + s.y);
+        for (let k = 0; k < (s.w * s.h) / 55; k++) {
+          const x = s.x + 3 + rnd() * (s.w - 6), y = s.y + 3 + rnd() * (s.h - 6);
+          const a = rnd() * 6.28, sw = Math.sin(t * 2 + x) * 0.15;
+          ctx.strokeStyle = rnd() < 0.5 ? '#7f9a3a' : '#a3b84a';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(x - Math.cos(a + sw) * 9, y - Math.sin(a + sw) * 9);
+          ctx.lineTo(x + Math.cos(a + sw) * 9, y + Math.sin(a + sw) * 9);
+          ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(90,120,40,0.55)';
+        ctx.fillRect(s.x + 2, s.y + 2, s.w - 4, s.h - 4);
+        for (let k = 0; k < 10; k++) {
+          ctx.fillStyle = '#e8c547';
+          ctx.fillRect(s.x + 5 + rnd() * (s.w - 10), s.y + 5 + rnd() * (s.h - 10), 3, 6);
+        }
+      } else if (s.kind === 'skip') {
+        ctx.fillStyle = '#2f5d3a';
+        rrect(ctx, s.x, s.y, s.w, s.h, 3);
+        ctx.fill();
+        ctx.fillStyle = '#3c3a33';
+        ctx.fillRect(s.x + 4, s.y + 4, s.w - 8, s.h - 8);
+        const rnd = TFL.mulberry32(s.x + s.y * 7);
+        for (let k = 0; k < 9; k++) {
+          ctx.fillStyle = ['#8d8a7e', '#c0392b', '#d9d4c5', '#6b5b45', '#2980b9'][Math.floor(rnd() * 5)];
+          ctx.fillRect(s.x + 5 + rnd() * (s.w - 14), s.y + 5 + rnd() * (s.h - 14), 4 + rnd() * 6, 3 + rnd() * 5);
+        }
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(s.x, s.y, s.w, s.h);
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillRect(s.x + s.w - 10, s.y + 1, 8, 3);
+      } else if (s.kind === 'laundry') {
+        // sheets hanging on a double line
+        ctx.strokeStyle = 'rgba(40,40,40,0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(s.x - 4, s.y + 3); ctx.lineTo(s.x + s.w + 4, s.y + 3);
+        ctx.moveTo(s.x - 4, s.y + s.h - 3); ctx.lineTo(s.x + s.w + 4, s.y + s.h - 3);
+        ctx.stroke();
+        const cols = ['#f4f1ea', '#e74c3c', '#3498db', '#f39c12', '#ecf0f1', '#9b59b6'];
+        const n = Math.max(3, Math.round(s.w / 18));
+        for (let k = 0; k < n; k++) {
+          ctx.fillStyle = cols[(k + s.x) % cols.length];
+          const w = s.w / n;
+          ctx.fillRect(s.x + k * w + 0.5, s.y + 2 + Math.sin(t * 2 + k) * 0.8, w - 1, s.h - 4);
+          ctx.fillStyle = 'rgba(0,0,0,0.08)';
+          ctx.fillRect(s.x + k * w + w * 0.6, s.y + 2, w * 0.3, s.h - 4);
+        }
+      }
+      ctx.restore();
     }
 
     label(ctx, x, y, text, color) {
